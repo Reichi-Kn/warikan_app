@@ -7,7 +7,6 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="割り勘メモ">
 <meta name="theme-color" content="#ffffff">
-
 <title>割り勘メモ</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -402,7 +401,7 @@ async function joinRoom() {
   if(!myName||code.length!==4){showToast('名前と4桁のコードを入力してください');return;}
   // Supabaseにルームが存在するか確認
   try {
-    const res = await fetch(SUPA_URL + '/rest/v1/rooms?code=eq.' + code + '&select=code', {
+    const res = await fetch(SUPA_URL + '/rest/v1/rooms?code=eq.' + code + '&select=data', {
       headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
     });
     const rows = await res.json();
@@ -410,14 +409,31 @@ async function joinRoom() {
       showToast('そのコードは存在しません');
       return;
     }
+    // 既存データを取得して member1 を確認
+    const d = JSON.parse(rows[0].data);
+    const member1 = d.member1 || '';
+    state.myName = myName;
+    state.partnerName = member1 && member1 !== myName ? member1 : '相手';
+    state.roomCode = code;
+    state.records = d.records || [];
+    // 自分をmember2として登録（記録はそのまま引き継ぐ）
+    await fetch(SUPA_URL + '/rest/v1/rooms', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({
+        code,
+        data: JSON.stringify({ records: state.records, member1, member2: myName, leftMember: '' })
+      })
+    });
   } catch(e) {
     showToast('接続エラーが発生しました');
     return;
   }
-  state.myName=myName; state.partnerName='相手'; state.roomCode=code;
-  const existing = await cloudLoad();
-  state.records = existing;
-  await cloudSave(state.records);
   saveLocal(); enterApp(); showToast('接続しました');
 }
 
@@ -631,7 +647,6 @@ function showTab(tab,btn) {
 
 async function resetApp() {
   if(confirm('ペアを解除してリセットしますか？')) {
-    // 相手に退出を通知
     try {
       await fetch(SUPA_URL + '/rest/v1/rooms', {
         method: 'POST',
@@ -643,7 +658,12 @@ async function resetApp() {
         },
         body: JSON.stringify({
           code: state.roomCode,
-          data: JSON.stringify({ records: state.records, member1: state.myName, member2: state.partnerName, leftMember: state.myName })
+          data: JSON.stringify({
+            records: [],
+            member1: '',
+            member2: '',
+            leftMember: state.myName
+          })
         })
       });
     } catch(e) {}
