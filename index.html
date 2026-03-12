@@ -311,22 +311,20 @@ function loadLocal() {
 }
 
 async function cloudSave(records) {
-  saveLocal(); // 必ずlocalStorageにも保存
+  state.records = records;
+  saveLocal(); // localStorageを必ず先に保存
   try { await window.storage.set('room_'+state.roomCode, JSON.stringify(records), true); } catch(e){}
 }
 
 async function cloudLoad() {
-  // まずwindow.storageを試みる（2人で共有するため）
   try {
     const r = await window.storage.get('room_'+state.roomCode, true);
     if(r) {
       const data = JSON.parse(r.value);
-      // クラウドのデータの方が新しければ使う
       if(data.length >= state.records.length) return data;
     }
   } catch(e){}
-  // 使えない場合はlocalStorageのデータを返す
-  return state.records;
+  return state.records; // フォールバック: localStorageのデータ
 }
 
 async function init() {
@@ -348,13 +346,16 @@ async function joinRoom() {
   const code=document.getElementById('join-code').value.trim();
   if(!myName||code.length!==4){showToast('名前と4桁のコードを入力してください');return;}
   state.myName=myName; state.partnerName='相手'; state.roomCode=code;
-  const ex=await cloudLoad();
-  if(ex.length>0){
-    const other=[...new Set(ex.map(r=>r.payerName))].find(n=>n!==myName);
-    if(other) state.partnerName=other;
-  }
-  // Store my name so the creator can discover it
-  await window.storage.set('room_'+code+'_member2', myName, true).catch(()=>{});
+  // 相手の名前を既存記録から探す（エラーでも続行）
+  try {
+    const ex=await cloudLoad();
+    if(ex.length>0){
+      const other=[...new Set(ex.map(r=>r.payerName))].find(n=>n!==myName);
+      if(other) state.partnerName=other;
+    }
+  } catch(e){}
+  // member2登録（エラーでも続行）
+  try { await window.storage.set('room_'+code+'_member2', myName, true); } catch(e){}
   saveLocal(); enterApp(); showToast('接続しました');
 }
 
