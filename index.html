@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="割り勘メモ">
 <meta name="theme-color" content="#ffffff">
+
 <title>割り勘メモ</title>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
@@ -321,6 +322,26 @@ async function cloudLoad() {
     if(rows && rows.length > 0) {
       const d = JSON.parse(rows[0].data);
       const remoteRecords = d.records || [];
+      // 相手が退出したか確認
+      if(d.leftMember && d.leftMember !== state.myName && state.partnerName !== '相手') {
+        showToast(state.partnerName + ' がペアを抜けました');
+        state.partnerName = '相手';
+        saveLocal(); updateLabels();
+        // leftフラグをクリア
+        await fetch(SUPA_URL + '/rest/v1/rooms', {
+          method: 'POST',
+          headers: {
+            'apikey': SUPA_KEY,
+            'Authorization': 'Bearer ' + SUPA_KEY,
+            'Content-Type': 'application/json',
+            'Prefer': 'resolution=merge-duplicates,return=minimal'
+          },
+          body: JSON.stringify({
+            code: state.roomCode,
+            data: JSON.stringify({ records: remoteRecords, member1: state.myName, member2: '相手' })
+          })
+        });
+      }
       // 相手の名前を自動取得
       if(state.partnerName === '相手') {
         const m1 = d.member1; const m2 = d.member2;
@@ -608,7 +629,28 @@ function showTab(tab,btn) {
   btn.classList.add('active');
 }
 
-function resetApp() { if(confirm('ペアを解除してリセットしますか？')){localStorage.removeItem(KEY);location.reload();} }
+async function resetApp() {
+  if(confirm('ペアを解除してリセットしますか？')) {
+    // 相手に退出を通知
+    try {
+      await fetch(SUPA_URL + '/rest/v1/rooms', {
+        method: 'POST',
+        headers: {
+          'apikey': SUPA_KEY,
+          'Authorization': 'Bearer ' + SUPA_KEY,
+          'Content-Type': 'application/json',
+          'Prefer': 'resolution=merge-duplicates,return=minimal'
+        },
+        body: JSON.stringify({
+          code: state.roomCode,
+          data: JSON.stringify({ records: state.records, member1: state.myName, member2: state.partnerName, leftMember: state.myName })
+        })
+      });
+    } catch(e) {}
+    localStorage.removeItem(KEY);
+    location.reload();
+  }
+}
 
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
 
