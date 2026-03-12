@@ -175,6 +175,7 @@
   <div class="card">
     <div class="card-title">コードで参加する</div>
     <div class="field"><label>あなたの名前</label><input type="text" id="join-name" placeholder="例: けんた" maxlength="10"></div>
+    <div class="field"><label>相手の名前</label><input type="text" id="join-partner-name" placeholder="例: さくら" maxlength="10"></div>
     <div class="field"><label>ペアコード（4桁）</label><input type="text" id="join-code" placeholder="0000" maxlength="4" inputmode="numeric"></div>
     <button class="btn btn-outline" onclick="joinRoom()">参加する</button>
   </div>
@@ -338,24 +339,19 @@ function createRoom() {
   if(!myName){showToast('名前を入力してください');return;}
   state.myName=myName; state.partnerName='相手';
   state.roomCode=String(Math.floor(1000+Math.random()*9000));
+  // ペアコードに自分の名前を紐づけて保存（相手が参照できるように）
+  localStorage.setItem('warikan_room_'+state.roomCode+'_creator', myName);
   saveLocal(); enterApp(); showToast('ペアコード: '+state.roomCode);
 }
 
 async function joinRoom() {
   const myName=document.getElementById('join-name').value.trim();
+  const partnerName=document.getElementById('join-partner-name').value.trim();
   const code=document.getElementById('join-code').value.trim();
-  if(!myName||code.length!==4){showToast('名前と4桁のコードを入力してください');return;}
-  state.myName=myName; state.partnerName='相手'; state.roomCode=code;
-  // 相手の名前を既存記録から探す（エラーでも続行）
-  try {
-    const ex=await cloudLoad();
-    if(ex.length>0){
-      const other=[...new Set(ex.map(r=>r.payerName))].find(n=>n!==myName);
-      if(other) state.partnerName=other;
-    }
-  } catch(e){}
-  // member2登録（エラーでも続行）
-  try { await window.storage.set('room_'+code+'_member2', myName, true); } catch(e){}
+  if(!myName||!partnerName||code.length!==4){showToast('すべての項目を入力してください');return;}
+  state.myName=myName; state.partnerName=partnerName; state.roomCode=code;
+  // 自分の名前をペアコードに紐づけて保存
+  localStorage.setItem('warikan_room_'+code+'_member2', myName);
   saveLocal(); enterApp(); showToast('接続しました');
 }
 
@@ -371,12 +367,10 @@ async function enterApp() {
     if(JSON.stringify(fresh)!==JSON.stringify(state.records)){
       state.records=fresh; saveLocal(); renderHistory(); renderBalance();
     }
-    // Try to discover partner name
+    // 相手の名前をlocalStorageから取得
     if(state.partnerName==='相手'){
-      try{
-        const m=await window.storage.get('room_'+state.roomCode+'_member2',true);
-        if(m && m.value && m.value!==state.myName){ state.partnerName=m.value; saveLocal(); updateLabels(); }
-      }catch(e){}
+      const m2 = localStorage.getItem('warikan_room_'+state.roomCode+'_member2');
+      if(m2 && m2 !== state.myName){ state.partnerName=m2; saveLocal(); updateLabels(); }
     }
   },5000);
 }
