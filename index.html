@@ -80,8 +80,11 @@
   .row-right { text-align: right; flex-shrink: 0; }
   .row-amount { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 500; }
   .row-split { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+  .row-actions { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
   .row-del { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
   .row-del:active { color: var(--red); }
+  .row-edit { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
+  .row-edit:active { color: var(--accent); }
   .empty { text-align: center; padding: 52px 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; }
   .row.settle { border-color: #bbf7d0; background: #f0fdf4; }
   .row.settle .row-amount { color: var(--green); }
@@ -248,7 +251,7 @@
 <div class="overlay" id="overlay" onclick="closeSheet()"></div>
 <div class="sheet" id="sheet">
   <div class="sheet-handle"></div>
-  <div class="sheet-title">支払いを記録</div>
+  <div class="sheet-title" id="sheet-title">支払いを記録</div>
   <div class="form-field"><label class="form-label">金額</label><input type="number" id="f-amount" placeholder="例: 3200" inputmode="numeric"></div>
   <div class="form-field"><label class="form-label">メモ</label><input type="text" id="f-memo" placeholder="例: 居酒屋、ランチ..."></div>
   <div class="form-field"><label class="form-label">日付</label><input type="text" id="f-date"></div>
@@ -266,7 +269,7 @@
     </div>
     <div class="split-hint show" id="split-hint">1人あたり ¥–</div>
   </div>
-  <button class="btn" onclick="addRecord()" style="margin-top:4px">記録する</button>
+  <button class="btn" id="sheet-submit-btn" onclick="addRecord()" style="margin-top:4px">記録する</button>
 </div>
 
 <div class="confirm-overlay" id="confirm-overlay">
@@ -276,6 +279,17 @@
     <div class="confirm-btns">
       <button class="confirm-cancel" onclick="closeConfirm()">キャンセル</button>
       <button class="confirm-ok" onclick="confirmDelete()">削除</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="leave-overlay">
+  <div class="confirm-box">
+    <div class="confirm-box-title">ペアを解除しますか？</div>
+    <div class="confirm-box-sub">相手にも通知されます。記録はリセットされます。</div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" onclick="closeLeaveConfirm()">キャンセル</button>
+      <button class="confirm-ok" onclick="confirmLeave()">解除する</button>
     </div>
   </div>
 </div>
@@ -398,6 +412,7 @@ async function joinRoom() {
     if(!rows || rows.length === 0){ showToast('そのコードは存在しません'); return; }
     const d = JSON.parse(rows[0].data);
     const member1 = d.member1 || '';
+    if(!member1){ showToast('そのコードは使用できません'); return; }
     const partner = member1 && member1 !== myName ? member1 : '相手';
     state.myName = myName;
     state.partnerName = partner;
@@ -454,8 +469,44 @@ async function loadAndRender() {
   renderHistory(); renderBalance();
 }
 
-function openSheet() { document.getElementById('overlay').classList.add('open'); document.getElementById('sheet').classList.add('open'); setTimeout(()=>document.getElementById('f-amount').focus(),100); }
-function closeSheet() { document.getElementById('overlay').classList.remove('open'); document.getElementById('sheet').classList.remove('open'); }
+let _editingId = null;
+
+function openSheet(editId = null) {
+  _editingId = editId;
+  if(editId !== null) {
+    const r = state.records.find(r => r.id === editId);
+    if(!r) return;
+    document.getElementById('sheet-title').textContent = '記録を編集';
+    document.getElementById('sheet-submit-btn').textContent = '更新する';
+    document.getElementById('f-amount').value = r.amount;
+    document.getElementById('f-memo').value = r.memo;
+    document.getElementById('f-date').value = r.date;
+    const isMe = r.payerName === state.myName;
+    selectPayer(isMe ? 'me' : 'partner');
+    state.isSplitOn = r.isSplit;
+    document.getElementById('sw').classList.toggle('on', r.isSplit);
+    document.getElementById('split-hint').classList.toggle('show', r.isSplit);
+    updateHint();
+  } else {
+    document.getElementById('sheet-title').textContent = '支払いを記録';
+    document.getElementById('sheet-submit-btn').textContent = '記録する';
+    document.getElementById('f-amount').value = '';
+    document.getElementById('f-memo').value = '';
+    selectPayer('me'); state.isSplitOn = true;
+    document.getElementById('sw').classList.add('on');
+    document.getElementById('split-hint').classList.add('show');
+    updateHint();
+  }
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('sheet').classList.add('open');
+  setTimeout(()=>document.getElementById('f-amount').focus(), 100);
+}
+
+function closeSheet() {
+  _editingId = null;
+  document.getElementById('overlay').classList.remove('open');
+  document.getElementById('sheet').classList.remove('open');
+}
 
 function selectPayer(who) {
   state.selectedPayer=who;
@@ -482,15 +533,23 @@ async function addRecord() {
   const memo=document.getElementById('f-memo').value.trim()||'支払い';
   const date=document.getElementById('f-date').value||'今日';
   if(!amount||amount<=0){showToast('金額を入力してください');return;}
-  const record={id:Date.now(),amount,memo,date,payerName:state.selectedPayer==='me'?state.myName:state.partnerName,isSplit:state.isSplitOn,splitAmount:state.isSplitOn?Math.ceil(amount/2):0};
-  state.records.unshift(record);
+  if(_editingId !== null) {
+    // 編集モード
+    state.records = state.records.map(r => r.id === _editingId ? {
+      ...r, amount, memo, date,
+      payerName: state.selectedPayer==='me' ? state.myName : state.partnerName,
+      isSplit: state.isSplitOn,
+      splitAmount: state.isSplitOn ? Math.ceil(amount/2) : 0
+    } : r);
+    showToast('更新しました');
+  } else {
+    // 新規追加
+    const record={id:Date.now(),amount,memo,date,payerName:state.selectedPayer==='me'?state.myName:state.partnerName,isSplit:state.isSplitOn,splitAmount:state.isSplitOn?Math.ceil(amount/2):0};
+    state.records.unshift(record);
+    showToast('記録しました');
+  }
   await cloudSave(state.records);
-  document.getElementById('f-amount').value='';
-  document.getElementById('f-memo').value='';
-  selectPayer('me'); state.isSplitOn=true;
-  document.getElementById('sw').classList.add('on');
-  document.getElementById('split-hint').classList.add('show');
-  updateHint(); closeSheet(); renderHistory(); renderBalance(); showToast('記録しました');
+  closeSheet(); renderHistory(); renderBalance();
 }
 
 let _pendingDeleteId = null;
@@ -531,7 +590,10 @@ function renderHistory() {
         <div class="row-amount">¥${r.amount.toLocaleString()}</div>
         <div class="row-split">${r.isSplit?'÷2 = ¥'+r.splitAmount.toLocaleString():isSettle?'返金済み':'割り勘なし'}</div>
       </div>
-      <button class="row-del" onclick="deleteRecord(${r.id})">✕</button>
+      <div class="row-actions">
+        ${!isSettle?`<button class="row-edit" onclick="openSheet(${r.id})">✎</button>`:''}
+        <button class="row-del" onclick="deleteRecord(${r.id})">✕</button>
+      </div>
     </div>`;
   }).join('');
 }
@@ -629,31 +691,33 @@ function showTab(tab,btn) {
   btn.classList.add('active');
 }
 
-async function resetApp() {
-  if(confirm('ペアを解除してリセットしますか？')) {
-    try {
-      await fetch(SUPA_URL + '/rest/v1/rooms', {
-        method: 'POST',
-        headers: {
-          'apikey': SUPA_KEY,
-          'Authorization': 'Bearer ' + SUPA_KEY,
-          'Content-Type': 'application/json',
-          'Prefer': 'resolution=merge-duplicates,return=minimal'
-        },
-        body: JSON.stringify({
-          code: state.roomCode,
-          data: JSON.stringify({
-            records: [],
-            member1: '',
-            member2: '',
-            leftMember: state.myName
-          })
-        })
-      });
-    } catch(e) {}
-    localStorage.removeItem(KEY);
-    location.reload();
-  }
+function resetApp() {
+  document.getElementById('leave-overlay').classList.add('open');
+}
+
+function closeLeaveConfirm() {
+  document.getElementById('leave-overlay').classList.remove('open');
+}
+
+async function confirmLeave() {
+  document.getElementById('leave-overlay').classList.remove('open');
+  try {
+    await fetch(SUPA_URL + '/rest/v1/rooms', {
+      method: 'POST',
+      headers: {
+        'apikey': SUPA_KEY,
+        'Authorization': 'Bearer ' + SUPA_KEY,
+        'Content-Type': 'application/json',
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
+      },
+      body: JSON.stringify({
+        code: state.roomCode,
+        data: JSON.stringify({ records: [], member1: '', member2: '', leftMember: state.myName })
+      })
+    });
+  } catch(e) {}
+  localStorage.removeItem(KEY);
+  location.reload();
 }
 
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
