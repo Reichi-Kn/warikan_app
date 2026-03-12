@@ -7,7 +7,608 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="割り勘メモ">
 <meta name="theme-color" content="#ffffff">
+<title>割り勘メモ</title><!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="割り勘メモ">
+<meta name="theme-color" content="#ffffff">
 <title>割り勘メモ</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #f5f5f5;
+    --white: #ffffff;
+    --border: #e0e0e0;
+    --text: #1a1a1a;
+    --text-sub: #888;
+    --accent: #2563eb;
+    --accent-light: #eff6ff;
+    --red: #dc2626;
+    --green: #16a34a;
+    --r: 12px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'Noto Sans JP', sans-serif; background: var(--bg); color: var(--text); min-height: 100dvh; font-size: 15px; }
+  .app { max-width: 430px; margin: 0 auto; padding-bottom: 80px; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+
+  /* CONNECT */
+  #screen-connect { display: flex; flex-direction: column; padding: 48px 20px 40px; gap: 20px; min-height: 100dvh; }
+  #screen-connect.active { display: flex; }
+  .connect-title { font-size: 22px; font-weight: 700; }
+  .connect-sub { font-size: 14px; color: var(--text-sub); margin-top: 4px; }
+  .card { background: var(--white); border-radius: var(--r); border: 1px solid var(--border); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .card-title { font-size: 12px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.8px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 13px; color: var(--text-sub); }
+  input[type="text"], input[type="number"] { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 15px; padding: 11px 13px; width: 100%; outline: none; transition: border-color 0.15s; }
+  input:focus { border-color: var(--accent); background: #fff; }
+  .btn { background: var(--accent); border: none; border-radius: 8px; color: #fff; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 15px; font-weight: 700; padding: 13px; width: 100%; transition: opacity 0.15s; }
+  .btn:active { opacity: 0.8; }
+  .btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .divider { display: flex; align-items: center; gap: 12px; color: var(--text-sub); font-size: 13px; }
+  .divider::before, .divider::after { content: ''; flex: 1; height: 1px; background: var(--border); }
+
+  /* HEADER */
+  .header { background: var(--white); border-bottom: 1px solid var(--border); padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+  .header-title { font-size: 17px; font-weight: 700; }
+  .live-badge { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-sub); background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px; }
+  .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: blink 2s infinite; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* BALANCE */
+  .balance-wrap { padding: 14px 16px; }
+  .balance-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--r); padding: 18px; }
+  .balance-label { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+  .balance-num { font-family: 'DM Mono', monospace; font-size: 32px; font-weight: 500; }
+  .balance-num.owe { color: var(--red); }
+  .balance-num.receive { color: var(--green); }
+  .balance-desc { font-size: 13px; color: var(--text-sub); margin-top: 6px; }
+  .balance-cols { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--border); }
+  .bcol-label { font-size: 12px; color: var(--text-sub); margin-bottom: 3px; }
+  .bcol-val { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 500; }
+
+  /* ADD */
+  .add-wrap { padding: 0 16px 14px; }
+  .btn-add { background: var(--accent); border: none; border-radius: 8px; color: #fff; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 15px; font-weight: 700; padding: 14px; width: 100%; transition: opacity 0.15s; }
+  .btn-add:active { opacity: 0.8; }
+
+  /* LIST */
+  .section-label { font-size: 12px; font-weight: 700; color: var(--text-sub); text-transform: uppercase; letter-spacing: 0.8px; padding: 0 16px 8px; }
+  .list { padding: 0 16px; display: flex; flex-direction: column; gap: 8px; }
+  .row { background: var(--white); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; display: flex; align-items: center; gap: 12px; }
+  .row-left { flex: 1; min-width: 0; }
+  .row-memo { font-size: 15px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .row-meta { font-size: 12px; color: var(--text-sub); margin-top: 3px; display: flex; align-items: center; gap: 6px; }
+  .tag { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 6px; font-size: 11px; }
+  .row-right { text-align: right; flex-shrink: 0; }
+  .row-amount { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 500; }
+  .row-split { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
+  .row-del { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
+  .row-del:active { color: var(--red); }
+  .empty { text-align: center; padding: 52px 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; }
+  .row.settle { border-color: #bbf7d0; background: #f0fdf4; }
+  .row.settle .row-amount { color: var(--green); }
+  .tag.settle-tag { background: #dcfce7; border-color: #86efac; color: var(--green); }
+  .btn-settle { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; color: var(--green); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; padding: 11px; width: 100%; margin-top: 12px; transition: opacity 0.15s; }
+  .btn-settle:active { opacity: 0.7; }
+
+  /* CONFIRM DIALOG */
+  .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; opacity: 0; pointer-events: none; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; padding: 24px; }
+  .confirm-overlay.open { opacity: 1; pointer-events: all; }
+  .confirm-box { background: var(--white); border-radius: 16px; padding: 24px 20px 16px; width: 100%; max-width: 320px; text-align: center; transform: scale(0.95); transition: transform 0.2s; }
+  .confirm-overlay.open .confirm-box { transform: scale(1); }
+  .confirm-box-title { font-size: 16px; font-weight: 700; margin-bottom: 8px; }
+  .confirm-box-sub { font-size: 13px; color: var(--text-sub); margin-bottom: 20px; line-height: 1.6; }
+  .confirm-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .confirm-cancel { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; padding: 12px; }
+  .confirm-ok { background: var(--red); border: none; border-radius: 8px; color: #fff; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; padding: 12px; }
+  .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
+  .overlay.open { opacity: 1; pointer-events: all; }
+  .sheet { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: 100%; max-width: 430px; background: var(--white); border-radius: 16px 16px 0 0; z-index: 101; padding: 12px 20px 40px; transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); border-top: 1px solid var(--border); }
+  .sheet.open { transform: translateX(-50%) translateY(0); }
+  .sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
+  .sheet-title { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
+  .form-field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+  .form-label { font-size: 13px; color: var(--text-sub); }
+  .payer-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .payer-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 500; padding: 12px; text-align: center; transition: all 0.15s; }
+  .payer-btn.sel { background: var(--accent-light); border-color: var(--accent); color: var(--accent); font-weight: 700; }
+  .split-row { display: flex; align-items: center; justify-content: space-between; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; cursor: pointer; gap: 10px; }
+  .split-row span { font-size: 14px; flex: 1; }
+  .sw { width: 42px; height: 24px; background: var(--border); border-radius: 12px; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .sw.on { background: var(--accent); }
+  .sw-k { position: absolute; top: 2px; left: 2px; width: 20px; height: 20px; background: #fff; border-radius: 50%; box-shadow: 0 1px 3px rgba(0,0,0,0.2); transition: transform 0.2s; }
+  .sw.on .sw-k { transform: translateX(18px); }
+  .split-hint { font-size: 13px; color: var(--text-sub); text-align: center; padding: 8px; display: none; }
+  .split-hint.show { display: block; }
+
+  /* CALC */
+  .page-header { background: var(--white); border-bottom: 1px solid var(--border); padding: 14px 16px; }
+  .page-header-title { font-size: 17px; font-weight: 700; }
+  .page-body { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+  .result-box { background: var(--white); border: 1px solid var(--border); border-radius: var(--r); padding: 20px; text-align: center; }
+  .result-label { font-size: 12px; color: var(--text-sub); margin-bottom: 6px; }
+  .result-num { font-family: 'DM Mono', monospace; font-size: 40px; font-weight: 500; color: var(--accent); }
+  .result-sub { font-size: 13px; color: var(--text-sub); margin-top: 4px; }
+  .counter-row { display: flex; align-items: center; gap: 12px; background: var(--white); border: 1px solid var(--border); border-radius: var(--r); padding: 14px; }
+  .counter-label { font-size: 13px; color: var(--text-sub); flex: 1; }
+  .counter-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 18px; width: 36px; height: 36px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .counter-btn:active { background: var(--border); }
+  .counter-val { font-family: 'DM Mono', monospace; font-size: 22px; font-weight: 500; min-width: 32px; text-align: center; }
+  .person-list { display: flex; flex-direction: column; gap: 8px; }
+  .person-row { background: var(--white); border: 1px solid var(--border); border-radius: 8px; padding: 12px 14px; display: flex; align-items: center; gap: 10px; }
+  .person-name { flex: 1; font-size: 14px; font-weight: 500; }
+  .person-amt { font-family: 'DM Mono', monospace; font-size: 16px; color: var(--accent); }
+
+  /* SETTINGS */
+  .settings-body { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .settings-row { background: var(--white); border: 1px solid var(--border); border-radius: var(--r); padding: 16px; }
+  .settings-key { font-size: 12px; color: var(--text-sub); margin-bottom: 4px; }
+  .settings-val { font-size: 15px; font-weight: 700; }
+  .settings-code { font-family: 'DM Mono', monospace; font-size: 26px; color: var(--accent); letter-spacing: 5px; }
+  .btn-red { background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; color: var(--red); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; padding: 13px; width: 100%; margin-top: 6px; transition: opacity 0.15s; }
+  .btn-red:active { opacity: 0.7; }
+
+  /* NAV */
+  .nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 430px; background: var(--white); border-top: 1px solid var(--border); display: flex; padding: 6px 0 20px; z-index: 50; }
+  .nav-btn { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; background: none; border: none; color: var(--text-sub); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 10px; padding: 6px 0; transition: color 0.15s; }
+  .nav-btn.active { color: var(--accent); }
+  .nav-icon { font-size: 20px; }
+
+  /* TOAST */
+  .toast { position: fixed; top: 72px; left: 50%; transform: translateX(-50%) translateY(-8px); background: #1a1a1a; color: #fff; border-radius: 8px; padding: 10px 18px; font-size: 13px; z-index: 200; opacity: 0; pointer-events: none; transition: all 0.25s; white-space: nowrap; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- CONNECT -->
+<div id="screen-connect" class="screen active">
+  <div>
+    <div class="connect-title">🗒️ 割り勘メモ</div>
+    <div class="connect-sub">2人でシェアできる支払い記録</div>
+  </div>
+  <div class="card">
+    <div class="card-title">新しくはじめる</div>
+    <div class="field"><label>あなたの名前</label><input type="text" id="new-name" placeholder="例: さくら" maxlength="10"></div>
+    <button class="btn" onclick="createRoom()">ペアコードを発行する</button>
+  </div>
+  <div class="divider">または</div>
+  <div class="card">
+    <div class="card-title">コードで参加する</div>
+    <div class="field"><label>あなたの名前</label><input type="text" id="join-name" placeholder="例: けんた" maxlength="10"></div>
+    <div class="field"><label>相手の名前</label><input type="text" id="join-partner-name" placeholder="例: さくら" maxlength="10"></div>
+    <div class="field"><label>ペアコード（4桁）</label><input type="text" id="join-code" placeholder="0000" maxlength="4" inputmode="numeric"></div>
+    <button class="btn btn-outline" onclick="joinRoom()">参加する</button>
+  </div>
+</div>
+
+<!-- MAIN -->
+<div id="screen-main" class="screen">
+  <div class="header">
+    <div class="header-title">割り勘メモ</div>
+    <div class="live-badge"><div class="live-dot"></div><span id="pair-label">ペア</span></div>
+  </div>
+  <div class="balance-wrap">
+    <div class="balance-card">
+      <div class="balance-label">精算状況</div>
+      <div class="balance-num" id="balance-num">¥0</div>
+      <div class="balance-desc" id="balance-desc">おたがいさまです</div>
+      <div class="balance-cols">
+        <div><div class="bcol-label" id="me-label">あなた</div><div class="bcol-val" id="me-total">¥0</div></div>
+        <div><div class="bcol-label" id="partner-label">相手</div><div class="bcol-val" id="partner-total">¥0</div></div>
+      </div>
+      <button class="btn-settle" id="btn-settle" style="display:none" onclick="settleUp()">精算する（返金を記録）</button>
+    </div>
+  </div>
+  <div class="add-wrap"><button class="btn-add" onclick="openSheet()">＋ 支払いを記録する</button></div>
+  <div class="section-label">履歴</div>
+  <div class="list" id="history-list"><div class="empty">まだ記録がありません<br>上のボタンから追加してみよう</div></div>
+</div>
+
+<!-- CALC -->
+<div id="screen-calc" class="screen">
+  <div class="page-header"><div class="page-header-title">割り勘計算</div></div>
+  <div class="page-body">
+    <div class="card" style="gap:10px">
+      <div class="field"><label class="form-label">合計金額</label><input type="number" id="calc-total" placeholder="例: 5800" inputmode="numeric" oninput="calcSplit()"></div>
+      <div class="counter-row">
+        <span class="counter-label">人数</span>
+        <button class="counter-btn" onclick="changeCount(-1)">−</button>
+        <span class="counter-val" id="count-display">2</span>
+        <button class="counter-btn" onclick="changeCount(1)">＋</button>
+      </div>
+    </div>
+    <div class="result-box">
+      <div class="result-label">1人あたり</div>
+      <div class="result-num" id="calc-per">¥0</div>
+      <div class="result-sub" id="calc-sub"></div>
+    </div>
+    <div class="person-list" id="person-rows"></div>
+    <button class="btn" onclick="addFromCalc()" id="btn-add-from-calc" style="display:none">この金額を記録する</button>
+  </div>
+</div>
+
+<!-- SETTINGS -->
+<div id="screen-settings" class="screen">
+  <div class="page-header"><div class="page-header-title">設定</div></div>
+  <div class="settings-body">
+    <div class="settings-row"><div class="settings-key">ペアコード（相手に教えてください）</div><div class="settings-code" id="show-code">----</div></div>
+    <div class="settings-row"><div class="settings-key">あなたの名前</div><div class="settings-val" id="show-my-name">-</div></div>
+    <div class="settings-row"><div class="settings-key">相手の名前</div><div class="settings-val" id="show-partner-name">-</div></div>
+    <button class="btn-red" onclick="resetApp()">ペアを解除してリセット</button>
+  </div>
+</div>
+
+<!-- NAV -->
+<nav class="nav" id="main-nav" style="display:none">
+  <button class="nav-btn active" onclick="showTab('main',this)"><span class="nav-icon">🏠</span>ホーム</button>
+  <button class="nav-btn" onclick="showTab('calc',this)"><span class="nav-icon">🧮</span>計算</button>
+  <button class="nav-btn" onclick="showTab('settings',this)"><span class="nav-icon">⚙️</span>設定</button>
+</nav>
+
+<!-- SHEET -->
+<div class="overlay" id="overlay" onclick="closeSheet()"></div>
+<div class="sheet" id="sheet">
+  <div class="sheet-handle"></div>
+  <div class="sheet-title">支払いを記録</div>
+  <div class="form-field"><label class="form-label">金額</label><input type="number" id="f-amount" placeholder="例: 3200" inputmode="numeric"></div>
+  <div class="form-field"><label class="form-label">メモ</label><input type="text" id="f-memo" placeholder="例: 居酒屋、ランチ..."></div>
+  <div class="form-field"><label class="form-label">日付</label><input type="text" id="f-date"></div>
+  <div class="form-field">
+    <label class="form-label">支払ったのは？</label>
+    <div class="payer-row">
+      <button class="payer-btn sel" id="payer-me" onclick="selectPayer('me')"><span id="payer-me-label">あなた</span></button>
+      <button class="payer-btn" id="payer-partner" onclick="selectPayer('partner')"><span id="payer-partner-label">相手</span></button>
+    </div>
+  </div>
+  <div class="form-field">
+    <div class="split-row" onclick="toggleSplit()">
+      <span>割り勘（÷2）</span>
+      <div class="sw on" id="sw"><div class="sw-k"></div></div>
+    </div>
+    <div class="split-hint show" id="split-hint">1人あたり ¥–</div>
+  </div>
+  <button class="btn" onclick="addRecord()" style="margin-top:4px">記録する</button>
+</div>
+
+<div class="confirm-overlay" id="confirm-overlay">
+  <div class="confirm-box">
+    <div class="confirm-box-title">記録を削除しますか？</div>
+    <div class="confirm-box-sub" id="confirm-msg"></div>
+    <div class="confirm-btns">
+      <button class="confirm-cancel" onclick="closeConfirm()">キャンセル</button>
+      <button class="confirm-ok" onclick="confirmDelete()">削除</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+</div>
+
+<script>
+// ===== SUPABASE =====
+const SUPA_URL = 'https://qwfqasjmwvhysqxskauo.supabase.co';
+const SUPA_KEY = 'sb_publishable_lFQLvGsPlM2_blIE81zGEg_2HlNUh84';
+
+async function supaRequest(method, path, body) {
+  const res = await fetch(SUPA_URL + '/rest/v1' + path, {
+    method,
+    headers: {
+      'apikey': SUPA_KEY,
+      'Authorization': 'Bearer ' + SUPA_KEY,
+      'Content-Type': 'application/json',
+      'Prefer': method === 'POST' ? 'resolution=merge-duplicates' : ''
+    },
+    body: body ? JSON.stringify(body) : undefined
+  });
+  if(method === 'GET') return res.json();
+  return res;
+}
+
+let state = { myName:'', partnerName:'', roomCode:'', records:[], isSplitOn:true, selectedPayer:'me', calcCount:2 };
+const KEY = 'warikan_v2';
+
+function saveLocal() {
+  localStorage.setItem(KEY, JSON.stringify({
+    myName: state.myName,
+    partnerName: state.partnerName,
+    roomCode: state.roomCode,
+    records: state.records
+  }));
+}
+
+function loadLocal() {
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY)||'null');
+    if(d?.roomCode){
+      state.myName = d.myName;
+      state.partnerName = d.partnerName;
+      state.roomCode = d.roomCode;
+      state.records = d.records || [];
+      return true;
+    }
+  } catch(e){}
+  return false;
+}
+
+async function cloudSave(records) {
+  state.records = records;
+  saveLocal();
+  try {
+    await supaRequest('POST', '/rooms', {
+      code: state.roomCode,
+      data: JSON.stringify({ records, member1: state.myName, member2: state.partnerName })
+    });
+  } catch(e) { console.error('cloudSave error', e); }
+}
+
+async function cloudLoad() {
+  try {
+    const rows = await supaRequest('GET', '/rooms?code=eq.' + state.roomCode + '&select=data');
+    if(rows && rows.length > 0) {
+      const d = JSON.parse(rows[0].data);
+      const remoteRecords = d.records || [];
+      // 相手の名前を取得
+      if(state.partnerName === '相手') {
+        const m1 = d.member1; const m2 = d.member2;
+        if(m1 && m1 !== state.myName) { state.partnerName = m1; saveLocal(); updateLabels(); }
+        else if(m2 && m2 !== state.myName) { state.partnerName = m2; saveLocal(); updateLabels(); }
+      }
+      return remoteRecords;
+    }
+  } catch(e) { console.error('cloudLoad error', e); }
+  return state.records;
+}
+
+async function init() {
+  const t = new Date();
+  document.getElementById('f-date').value = `${t.getMonth()+1}/${t.getDate()}`;
+  if(loadLocal()) enterApp();
+}
+
+function createRoom() {
+  const myName=document.getElementById('new-name').value.trim();
+  if(!myName){showToast('名前を入力してください');return;}
+  state.myName=myName; state.partnerName='相手';
+  state.roomCode=String(Math.floor(1000+Math.random()*9000));
+  saveLocal(); enterApp(); showToast('ペアコード: '+state.roomCode);
+}
+
+async function joinRoom() {
+  const myName=document.getElementById('join-name').value.trim();
+  const partnerName=document.getElementById('join-partner-name').value.trim();
+  const code=document.getElementById('join-code').value.trim();
+  if(!myName||!partnerName||code.length!==4){showToast('すべての項目を入力してください');return;}
+  state.myName=myName; state.partnerName=partnerName; state.roomCode=code;
+  saveLocal(); enterApp(); showToast('接続しました');
+}
+
+async function enterApp() {
+  const connectEl = document.getElementById('screen-connect');
+  connectEl.classList.remove('active');
+  connectEl.style.display = 'none';
+  document.getElementById('screen-main').classList.add('active');
+  document.getElementById('main-nav').style.display='flex';
+  updateLabels(); await loadAndRender();
+  setInterval(async()=>{
+    const fresh=await cloudLoad();
+    if(JSON.stringify(fresh)!==JSON.stringify(state.records)){
+      state.records=fresh; saveLocal(); renderHistory(); renderBalance();
+    }
+  },5000);
+}
+
+function updateLabels() {
+  document.getElementById('pair-label').textContent=state.myName+' & '+state.partnerName;
+  document.getElementById('me-label').textContent=state.myName;
+  document.getElementById('partner-label').textContent=state.partnerName;
+  document.getElementById('payer-me-label').textContent=state.myName;
+  document.getElementById('payer-partner-label').textContent=state.partnerName;
+  document.getElementById('show-code').textContent=state.roomCode;
+  document.getElementById('show-my-name').textContent=state.myName;
+  document.getElementById('show-partner-name').textContent=state.partnerName;
+}
+
+async function loadAndRender() {
+  const fresh = await cloudLoad();
+  state.records = fresh;
+  saveLocal(); // クラウドから取得したデータをlocalStorageにも反映
+  renderHistory(); renderBalance();
+}
+
+function openSheet() { document.getElementById('overlay').classList.add('open'); document.getElementById('sheet').classList.add('open'); setTimeout(()=>document.getElementById('f-amount').focus(),100); }
+function closeSheet() { document.getElementById('overlay').classList.remove('open'); document.getElementById('sheet').classList.remove('open'); }
+
+function selectPayer(who) {
+  state.selectedPayer=who;
+  document.getElementById('payer-me').classList.toggle('sel',who==='me');
+  document.getElementById('payer-partner').classList.toggle('sel',who==='partner');
+}
+
+function toggleSplit() {
+  state.isSplitOn=!state.isSplitOn;
+  document.getElementById('sw').classList.toggle('on',state.isSplitOn);
+  document.getElementById('split-hint').classList.toggle('show',state.isSplitOn);
+  updateHint();
+}
+
+function updateHint() {
+  const amt=parseInt(document.getElementById('f-amount').value)||0;
+  document.getElementById('split-hint').textContent=state.isSplitOn?'1人あたり ¥'+Math.ceil(amt/2).toLocaleString():'';
+}
+
+document.getElementById('f-amount').addEventListener('input',updateHint);
+
+async function addRecord() {
+  const amount=parseInt(document.getElementById('f-amount').value);
+  const memo=document.getElementById('f-memo').value.trim()||'支払い';
+  const date=document.getElementById('f-date').value||'今日';
+  if(!amount||amount<=0){showToast('金額を入力してください');return;}
+  const record={id:Date.now(),amount,memo,date,payerName:state.selectedPayer==='me'?state.myName:state.partnerName,isSplit:state.isSplitOn,splitAmount:state.isSplitOn?Math.ceil(amount/2):0};
+  state.records.unshift(record);
+  await cloudSave(state.records);
+  document.getElementById('f-amount').value='';
+  document.getElementById('f-memo').value='';
+  selectPayer('me'); state.isSplitOn=true;
+  document.getElementById('sw').classList.add('on');
+  document.getElementById('split-hint').classList.add('show');
+  updateHint(); closeSheet(); renderHistory(); renderBalance(); showToast('記録しました');
+}
+
+let _pendingDeleteId = null;
+
+function deleteRecord(id) {
+  const r = state.records.find(r => r.id === id);
+  if (!r) return;
+  _pendingDeleteId = id;
+  document.getElementById('confirm-msg').textContent = `「${r.memo}」 ¥${r.amount.toLocaleString()}（${r.date}）`;
+  document.getElementById('confirm-overlay').classList.add('open');
+}
+
+function closeConfirm() {
+  _pendingDeleteId = null;
+  document.getElementById('confirm-overlay').classList.remove('open');
+}
+
+async function confirmDelete() {
+  if (_pendingDeleteId === null) return;
+  state.records = state.records.filter(r => r.id !== _pendingDeleteId);
+  _pendingDeleteId = null;
+  document.getElementById('confirm-overlay').classList.remove('open');
+  await cloudSave(state.records); renderHistory(); renderBalance(); showToast('削除しました');
+}
+
+function renderHistory() {
+  const el=document.getElementById('history-list');
+  if(!state.records.length){el.innerHTML='<div class="empty">まだ記録がありません<br>上のボタンから追加してみよう</div>';return;}
+  el.innerHTML=state.records.map(r=>{
+    const isSettle = r.isSettle;
+    return `
+    <div class="row${isSettle?' settle':''}">
+      <div class="row-left">
+        <div class="row-memo">${esc(r.memo)}</div>
+        <div class="row-meta"><span>${r.date}</span><span class="tag${isSettle?' settle-tag':''}">${esc(r.payerName)}</span>${isSettle?'<span class="tag settle-tag">精算</span>':''}</div>
+      </div>
+      <div class="row-right">
+        <div class="row-amount">¥${r.amount.toLocaleString()}</div>
+        <div class="row-split">${r.isSplit?'÷2 = ¥'+r.splitAmount.toLocaleString():isSettle?'返金済み':'割り勘なし'}</div>
+      </div>
+      <button class="row-del" onclick="deleteRecord(${r.id})">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function renderBalance() {
+  let myPaid=0,partnerPaid=0;
+  state.records.forEach(r=>{if(r.payerName===state.myName)myPaid+=r.amount;else partnerPaid+=r.amount;});
+  document.getElementById('me-total').textContent='¥'+myPaid.toLocaleString();
+  document.getElementById('partner-total').textContent='¥'+partnerPaid.toLocaleString();
+  let myOwed=0,partnerOwed=0;
+  state.records.forEach(r=>{if(!r.isSplit)return;if(r.payerName===state.myName)partnerOwed+=r.splitAmount;else myOwed+=r.splitAmount;});
+  // also account for past settlements
+  state.records.forEach(r=>{
+    if(!r.isSettle) return;
+    if(r.payerName===state.myName) myOwed-=r.amount;
+    else partnerOwed-=r.amount;
+  });
+  const diff=myOwed-partnerOwed;
+  const el=document.getElementById('balance-num');
+  const desc=document.getElementById('balance-desc');
+  const btn=document.getElementById('btn-settle');
+  if(Math.abs(diff)<1){
+    el.textContent='¥0';el.className='balance-num';desc.textContent='おたがいさまです';
+    btn.style.display='none';
+  } else if(diff>0){
+    el.textContent='¥'+diff.toLocaleString();el.className='balance-num owe';
+    desc.textContent=state.myName+' → '+state.partnerName+' に支払いが必要';
+    btn.textContent='精算する（¥'+diff.toLocaleString()+' を '+state.partnerName+' に返す）';
+    btn.style.display='block';
+  } else {
+    el.textContent='¥'+Math.abs(diff).toLocaleString();el.className='balance-num receive';
+    desc.textContent=state.partnerName+' → '+state.myName+' に支払いが必要';
+    btn.textContent='精算する（¥'+Math.abs(diff).toLocaleString()+' を '+state.myName+' が受け取った）';
+    btn.style.display='block';
+  }
+  state._lastDiff = diff;
+}
+
+async function settleUp() {
+  const diff = state._lastDiff || 0;
+  if(Math.abs(diff)<1) return;
+  const today = new Date();
+  const dateStr = `${today.getMonth()+1}/${today.getDate()}`;
+  let payerName, memo;
+  if(diff > 0) {
+    // I owe partner → I pay
+    payerName = state.myName;
+    memo = '精算';
+  } else {
+    // partner owes me → partner paid
+    payerName = state.partnerName;
+    memo = '精算';
+  }
+  const record = {
+    id: Date.now(),
+    amount: Math.abs(diff),
+    memo,
+    date: dateStr,
+    payerName,
+    isSplit: false,
+    splitAmount: 0,
+    isSettle: true
+  };
+  state.records.unshift(record);
+  await cloudSave(state.records);
+  renderHistory(); renderBalance(); showToast('精算を記録しました ✓');
+}
+
+function changeCount(d) { state.calcCount=Math.max(2,Math.min(10,state.calcCount+d)); document.getElementById('count-display').textContent=state.calcCount; calcSplit(); }
+
+function calcSplit() {
+  const total=parseInt(document.getElementById('calc-total').value)||0;
+  const per=total>0?Math.ceil(total/state.calcCount):0;
+  document.getElementById('calc-per').textContent='¥'+per.toLocaleString();
+  document.getElementById('calc-sub').textContent=total>0?`¥${total.toLocaleString()} ÷ ${state.calcCount}人`:'';
+  const rows=document.getElementById('person-rows');
+  if(total>0){
+    const names=[state.myName,state.partnerName];
+    rows.innerHTML=Array.from({length:state.calcCount},(_,i)=>
+      `<div class="person-row"><span class="person-name">${names[i]||(i+1)+'人目'}</span><span class="person-amt">¥${per.toLocaleString()}</span></div>`
+    ).join('');
+    document.getElementById('btn-add-from-calc').style.display='block';
+  } else { rows.innerHTML=''; document.getElementById('btn-add-from-calc').style.display='none'; }
+}
+
+function addFromCalc() {
+  const total=document.getElementById('calc-total').value;
+  showTab('main',document.querySelector('.nav-btn'));
+  setTimeout(()=>{document.getElementById('f-amount').value=total;document.getElementById('f-memo').value='割り勘';updateHint();openSheet();},100);
+}
+
+function showTab(tab,btn) {
+  ['main','calc','settings'].forEach(t=>document.getElementById('screen-'+t).classList.toggle('active',t===tab));
+  document.querySelectorAll('.nav-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function resetApp() { if(confirm('ペアを解除してリセットしますか？')){localStorage.removeItem(KEY);location.reload();} }
+
+function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+init();
+</script>
+</body>
+</html>
 <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   :root {
