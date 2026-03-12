@@ -169,7 +169,6 @@
   <div class="card">
     <div class="card-title">新しくはじめる</div>
     <div class="field"><label>あなたの名前</label><input type="text" id="new-name" placeholder="例: さくら" maxlength="10"></div>
-    <div class="field"><label>相手の名前</label><input type="text" id="partner-name-new" placeholder="例: けんた" maxlength="10"></div>
     <button class="btn" onclick="createRoom()">ペアコードを発行する</button>
   </div>
   <div class="divider">または</div>
@@ -288,13 +287,47 @@
 let state = { myName:'', partnerName:'', roomCode:'', records:[], isSplitOn:true, selectedPayer:'me', calcCount:2 };
 const KEY = 'warikan_v2';
 
-function saveLocal() { localStorage.setItem(KEY, JSON.stringify({myName:state.myName, partnerName:state.partnerName, roomCode:state.roomCode})); }
+function saveLocal() {
+  localStorage.setItem(KEY, JSON.stringify({
+    myName: state.myName,
+    partnerName: state.partnerName,
+    roomCode: state.roomCode,
+    records: state.records
+  }));
+}
+
 function loadLocal() {
-  try { const d = JSON.parse(localStorage.getItem(KEY)||'null'); if(d?.roomCode){Object.assign(state,d);return true;} } catch(e){}
+  try {
+    const d = JSON.parse(localStorage.getItem(KEY)||'null');
+    if(d?.roomCode){
+      state.myName = d.myName;
+      state.partnerName = d.partnerName;
+      state.roomCode = d.roomCode;
+      state.records = d.records || [];
+      return true;
+    }
+  } catch(e){}
   return false;
 }
-async function cloudSave(r) { try{await window.storage.set('room_'+state.roomCode,JSON.stringify(r),true);}catch(e){} }
-async function cloudLoad() { try{const r=await window.storage.get('room_'+state.roomCode,true);if(r)return JSON.parse(r.value);}catch(e){} return []; }
+
+async function cloudSave(records) {
+  saveLocal(); // 必ずlocalStorageにも保存
+  try { await window.storage.set('room_'+state.roomCode, JSON.stringify(records), true); } catch(e){}
+}
+
+async function cloudLoad() {
+  // まずwindow.storageを試みる（2人で共有するため）
+  try {
+    const r = await window.storage.get('room_'+state.roomCode, true);
+    if(r) {
+      const data = JSON.parse(r.value);
+      // クラウドのデータの方が新しければ使う
+      if(data.length >= state.records.length) return data;
+    }
+  } catch(e){}
+  // 使えない場合はlocalStorageのデータを返す
+  return state.records;
+}
 
 async function init() {
   const t = new Date();
@@ -304,9 +337,8 @@ async function init() {
 
 function createRoom() {
   const myName=document.getElementById('new-name').value.trim();
-  const partnerName=document.getElementById('partner-name-new').value.trim();
-  if(!myName||!partnerName){showToast('名前を入力してください');return;}
-  state.myName=myName; state.partnerName=partnerName;
+  if(!myName){showToast('名前を入力してください');return;}
+  state.myName=myName; state.partnerName='相手';
   state.roomCode=String(Math.floor(1000+Math.random()*9000));
   saveLocal(); enterApp(); showToast('ペアコード: '+state.roomCode);
 }
@@ -317,7 +349,12 @@ async function joinRoom() {
   if(!myName||code.length!==4){showToast('名前と4桁のコードを入力してください');return;}
   state.myName=myName; state.partnerName='相手'; state.roomCode=code;
   const ex=await cloudLoad();
-  if(ex.length>0){const o=[...new Set(ex.map(r=>r.payerName))].find(n=>n!==myName);if(o)state.partnerName=o;}
+  if(ex.length>0){
+    const other=[...new Set(ex.map(r=>r.payerName))].find(n=>n!==myName);
+    if(other) state.partnerName=other;
+  }
+  // Store my name so the creator can discover it
+  await window.storage.set('room_'+code+'_member2', myName, true).catch(()=>{});
   saveLocal(); enterApp(); showToast('接続しました');
 }
 
@@ -330,7 +367,16 @@ async function enterApp() {
   updateLabels(); await loadAndRender();
   setInterval(async()=>{
     const fresh=await cloudLoad();
-    if(JSON.stringify(fresh)!==JSON.stringify(state.records)){state.records=fresh;renderHistory();renderBalance();}
+    if(JSON.stringify(fresh)!==JSON.stringify(state.records)){
+      state.records=fresh; saveLocal(); renderHistory(); renderBalance();
+    }
+    // Try to discover partner name
+    if(state.partnerName==='相手'){
+      try{
+        const m=await window.storage.get('room_'+state.roomCode+'_member2',true);
+        if(m && m.value && m.value!==state.myName){ state.partnerName=m.value; saveLocal(); updateLabels(); }
+      }catch(e){}
+    }
   },5000);
 }
 
@@ -345,7 +391,12 @@ function updateLabels() {
   document.getElementById('show-partner-name').textContent=state.partnerName;
 }
 
-async function loadAndRender() { state.records=await cloudLoad(); renderHistory(); renderBalance(); }
+async function loadAndRender() {
+  const fresh = await cloudLoad();
+  state.records = fresh;
+  saveLocal(); // クラウドから取得したデータをlocalStorageにも反映
+  renderHistory(); renderBalance();
+}
 
 function openSheet() { document.getElementById('overlay').classList.add('open'); document.getElementById('sheet').classList.add('open'); setTimeout(()=>document.getElementById('f-amount').focus(),100); }
 function closeSheet() { document.getElementById('overlay').classList.remove('open'); document.getElementById('sheet').classList.remove('open'); }
