@@ -379,11 +379,23 @@ async function joinRoom() {
   const myName=document.getElementById('join-name').value.trim();
   const code=document.getElementById('join-code').value.trim();
   if(!myName||code.length!==4){showToast('名前と4桁のコードを入力してください');return;}
+  // Supabaseにルームが存在するか確認
+  try {
+    const res = await fetch(SUPA_URL + '/rest/v1/rooms?code=eq.' + code + '&select=code', {
+      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
+    });
+    const rows = await res.json();
+    if(!rows || rows.length === 0) {
+      showToast('そのコードは存在しません');
+      return;
+    }
+  } catch(e) {
+    showToast('接続エラーが発生しました');
+    return;
+  }
   state.myName=myName; state.partnerName='相手'; state.roomCode=code;
-  // まずSupabaseから既存データを取得して相手の名前を把握
   const existing = await cloudLoad();
   state.records = existing;
-  // 自分の名前をSupabaseに登録（member2として）
   await cloudSave(state.records);
   saveLocal(); enterApp(); showToast('接続しました');
 }
