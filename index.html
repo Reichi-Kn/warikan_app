@@ -81,7 +81,25 @@
   .row-amount { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 500; }
   .row-split { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
   .row-actions { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
-  .row-del { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
+  .date-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 15px; padding: 11px 13px; width: 100%; text-align: left; cursor: pointer; transition: border-color 0.15s; }
+  .date-btn:active { border-color: var(--accent); }
+  .calendar-box { background: var(--white); border-radius: 16px; padding: 16px; width: 320px; max-width: 90vw; }
+  .cal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .cal-header span { font-weight: 700; font-size: 16px; }
+  .cal-nav { background: none; border: none; font-size: 22px; cursor: pointer; color: var(--accent); padding: 4px 10px; border-radius: 8px; }
+  .cal-nav:active { background: var(--accent-light); }
+  .cal-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 12px; color: var(--text-sub); margin-bottom: 6px; }
+  .cal-weekdays span:first-child { color: #e53e3e; }
+  .cal-weekdays span:last-child { color: var(--accent); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+  .cal-day { aspect-ratio: 1; display: flex; align-items: center; justify-content: center; font-size: 14px; border-radius: 50%; cursor: pointer; border: none; background: none; font-family: 'Noto Sans JP', sans-serif; }
+  .cal-day:active { background: var(--accent-light); }
+  .cal-day.today { font-weight: 700; color: var(--accent); }
+  .cal-day.selected { background: var(--accent); color: white; font-weight: 700; }
+  .cal-day.other-month { color: var(--border); }
+  .cal-day.sun { color: #e53e3e; }
+  .cal-day.sat { color: var(--accent); }
+  .cal-day.selected.sun, .cal-day.selected.sat { color: white; }  .row-del { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
   .row-del:active { color: var(--red); }
   .row-edit { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
   .row-edit:active { color: var(--accent); }
@@ -254,7 +272,11 @@
   <div class="sheet-title" id="sheet-title">支払いを記録</div>
   <div class="form-field"><label class="form-label">金額</label><input type="number" id="f-amount" placeholder="例: 3200" inputmode="numeric"></div>
   <div class="form-field"><label class="form-label">メモ</label><input type="text" id="f-memo" placeholder="例: 居酒屋、ランチ..."></div>
-  <div class="form-field"><label class="form-label">日付</label><input type="text" id="f-date"></div>
+  <div class="form-field">
+    <label class="form-label">日付</label>
+    <button type="button" id="f-date-btn" class="date-btn" onclick="openCalendar()">📅 <span id="f-date-label">今日</span></button>
+    <input type="hidden" id="f-date">
+  </div>
   <div class="form-field">
     <label class="form-label">支払ったのは？</label>
     <div class="payer-row">
@@ -280,6 +302,20 @@
       <button class="confirm-cancel" onclick="closeConfirm()">キャンセル</button>
       <button class="confirm-ok" onclick="confirmDelete()">削除</button>
     </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="calendar-overlay" onclick="closeCalendar()">
+  <div class="calendar-box" onclick="event.stopPropagation()">
+    <div class="cal-header">
+      <button class="cal-nav" onclick="changeCalMonth(-1)">‹</button>
+      <span id="cal-title"></span>
+      <button class="cal-nav" onclick="changeCalMonth(1)">›</button>
+    </div>
+    <div class="cal-weekdays">
+      <span>日</span><span>月</span><span>火</span><span>水</span><span>木</span><span>金</span><span>土</span>
+    </div>
+    <div class="cal-grid" id="cal-grid"></div>
   </div>
 </div>
 
@@ -384,9 +420,74 @@ function loadLocal() {
   return false;
 }
 
-async function init() {
+// ===== CALENDAR =====
+let _calDate = new Date();
+let _calSelected = new Date();
+
+function todayStr() {
   const t = new Date();
-  document.getElementById('f-date').value = `${t.getMonth()+1}/${t.getDate()}`;
+  return `${t.getMonth()+1}/${t.getDate()}`;
+}
+
+function dateToLabel(d) {
+  const t = new Date();
+  const isToday = d.getFullYear()===t.getFullYear() && d.getMonth()===t.getMonth() && d.getDate()===t.getDate();
+  return isToday ? `今日 (${d.getMonth()+1}/${d.getDate()})` : `${d.getMonth()+1}/${d.getDate()}`;
+}
+
+function setDate(d) {
+  _calSelected = new Date(d);
+  const str = `${d.getMonth()+1}/${d.getDate()}`;
+  document.getElementById('f-date').value = str;
+  document.getElementById('f-date-label').textContent = dateToLabel(d);
+}
+
+function openCalendar() {
+  _calDate = new Date(_calSelected);
+  renderCalendar();
+  document.getElementById('calendar-overlay').classList.add('open');
+}
+
+function closeCalendar() {
+  document.getElementById('calendar-overlay').classList.remove('open');
+}
+
+function changeCalMonth(dir) {
+  _calDate.setMonth(_calDate.getMonth() + dir);
+  renderCalendar();
+}
+
+function renderCalendar() {
+  const y = _calDate.getFullYear(), m = _calDate.getMonth();
+  document.getElementById('cal-title').textContent = `${y}年 ${m+1}月`;
+  const first = new Date(y, m, 1);
+  const last = new Date(y, m+1, 0);
+  const today = new Date();
+  let html = '';
+  // 前月の空白
+  for(let i=0; i<first.getDay(); i++) {
+    html += `<button class="cal-day other-month" disabled></button>`;
+  }
+  for(let d=1; d<=last.getDate(); d++) {
+    const date = new Date(y, m, d);
+    const dow = date.getDay();
+    const isToday = y===today.getFullYear() && m===today.getMonth() && d===today.getDate();
+    const isSel = y===_calSelected.getFullYear() && m===_calSelected.getMonth() && d===_calSelected.getDate();
+    const cls = ['cal-day', isToday?'today':'', isSel?'selected':'', dow===0?'sun':'', dow===6?'sat':''].filter(Boolean).join(' ');
+    html += `<button class="${cls}" onclick="pickDate(${y},${m},${d})">${d}</button>`;
+  }
+  document.getElementById('cal-grid').innerHTML = html;
+}
+
+function pickDate(y, m, d) {
+  setDate(new Date(y, m, d));
+  closeCalendar();
+}
+
+async function init() {
+  const today = new Date();
+  _calSelected = today;
+  setDate(today);
   if(loadLocal()) enterApp();
 }
 
@@ -480,7 +581,14 @@ function openSheet(editId = null) {
     document.getElementById('sheet-submit-btn').textContent = '更新する';
     document.getElementById('f-amount').value = r.amount;
     document.getElementById('f-memo').value = r.memo;
-    document.getElementById('f-date').value = r.date;
+    // 日付をパースしてカレンダーに反映
+    const parts = r.date.split('/');
+    if(parts.length === 2) {
+      const d = new Date(new Date().getFullYear(), parseInt(parts[0])-1, parseInt(parts[1]));
+      setDate(d);
+    } else {
+      setDate(new Date());
+    }
     const isMe = r.payerName === state.myName;
     selectPayer(isMe ? 'me' : 'partner');
     state.isSplitOn = r.isSplit;
@@ -492,6 +600,7 @@ function openSheet(editId = null) {
     document.getElementById('sheet-submit-btn').textContent = '記録する';
     document.getElementById('f-amount').value = '';
     document.getElementById('f-memo').value = '';
+    setDate(new Date());
     selectPayer('me'); state.isSplitOn = true;
     document.getElementById('sw').classList.add('on');
     document.getElementById('split-hint').classList.add('show');
