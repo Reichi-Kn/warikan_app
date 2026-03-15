@@ -109,6 +109,10 @@
   .tag.settle-tag { background: #dcfce7; border-color: #86efac; color: var(--green); }
   .btn-settle { background: #f0fdf4; border: 1px solid #86efac; border-radius: 8px; color: var(--green); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; padding: 11px; width: 100%; margin-top: 12px; transition: opacity 0.15s; }
   .btn-settle:active { opacity: 0.7; }
+  .settle-total-label { font-size: 13px; color: var(--text-sub); text-align: center; margin-top: 4px; }
+  .settle-quick-btns { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+  .settle-quick-btn { background: var(--accent-light); border: 1px solid var(--accent); border-radius: 6px; color: var(--accent); cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 13px; font-weight: 700; padding: 7px 12px; transition: opacity 0.15s; }
+  .settle-quick-btn:active { opacity: 0.7; }
 
   /* CONFIRM DIALOG */
   .confirm-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 300; opacity: 0; pointer-events: none; transition: opacity 0.2s; display: flex; align-items: center; justify-content: center; padding: 24px; }
@@ -301,6 +305,22 @@
     <div class="confirm-btns">
       <button class="confirm-cancel" onclick="closeConfirm()">キャンセル</button>
       <button class="confirm-ok" onclick="confirmDelete()">削除</button>
+    </div>
+  </div>
+</div>
+
+<div class="confirm-overlay" id="settle-overlay">
+  <div class="confirm-box" style="text-align:left">
+    <div class="confirm-box-title" style="text-align:center">精算する</div>
+    <div class="settle-total-label" id="settle-total-label"></div>
+    <div class="form-field" style="margin:14px 0 6px">
+      <label class="form-label">精算する金額</label>
+      <input type="number" id="settle-amount-input" inputmode="numeric" placeholder="金額を入力">
+    </div>
+    <div class="settle-quick-btns" id="settle-quick-btns"></div>
+    <div class="confirm-btns" style="margin-top:16px">
+      <button class="confirm-cancel" onclick="closeSettleDialog()">キャンセル</button>
+      <button class="confirm-ok" style="background:var(--green)" onclick="confirmSettle()">記録する</button>
     </div>
   </div>
 </div>
@@ -741,25 +761,41 @@ function renderBalance() {
   state._lastDiff = diff;
 }
 
-async function settleUp() {
+function settleUp() {
   const diff = state._lastDiff || 0;
-  if(Math.abs(diff)<1) return;
+  if(Math.abs(diff) < 1) return;
+  const absDiff = Math.abs(diff);
+  // 説明文
+  const who = diff > 0
+    ? `${state.myName} → ${state.partnerName}`
+    : `${state.partnerName} → ${state.myName}`;
+  document.getElementById('settle-total-label').textContent = `未精算合計: ¥${absDiff.toLocaleString()}（${who}）`;
+  // 入力欄に全額をデフォルト設定
+  document.getElementById('settle-amount-input').value = absDiff;
+  // クイックボタン生成
+  const quarters = [1, 0.5, 0.25].map(r => Math.round(absDiff * r)).filter((v,i,a) => a.indexOf(v)===i && v > 0);
+  document.getElementById('settle-quick-btns').innerHTML = quarters.map(v =>
+    `<button class="settle-quick-btn" onclick="document.getElementById('settle-amount-input').value=${v}">¥${v.toLocaleString()}</button>`
+  ).join('');
+  document.getElementById('settle-overlay').classList.add('open');
+}
+
+function closeSettleDialog() {
+  document.getElementById('settle-overlay').classList.remove('open');
+}
+
+async function confirmSettle() {
+  const diff = state._lastDiff || 0;
+  const input = parseInt(document.getElementById('settle-amount-input').value);
+  if(!input || input <= 0) { showToast('金額を入力してください'); return; }
+  if(input > Math.abs(diff)) { showToast('未精算額を超えています'); return; }
   const today = new Date();
   const dateStr = `${today.getMonth()+1}/${today.getDate()}`;
-  let payerName, memo;
-  if(diff > 0) {
-    // I owe partner → I pay
-    payerName = state.myName;
-    memo = '精算';
-  } else {
-    // partner owes me → partner paid
-    payerName = state.partnerName;
-    memo = '精算';
-  }
+  const payerName = diff > 0 ? state.myName : state.partnerName;
   const record = {
     id: Date.now(),
-    amount: Math.abs(diff),
-    memo,
+    amount: input,
+    memo: '精算',
     date: dateStr,
     payerName,
     isSplit: false,
@@ -768,6 +804,7 @@ async function settleUp() {
   };
   state.records.unshift(record);
   await cloudSave(state.records);
+  closeSettleDialog();
   renderHistory(); renderBalance(); showToast('精算を記録しました ✓');
 }
 
