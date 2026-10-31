@@ -316,7 +316,8 @@
       <p class="transfer-warning">引き継ぎ時は「ペアを解除してリセット」を押さないでください。共有している記録も削除され、同じコードで参加できなくなります。</p>
       <p>同期に失敗している記録は、引き継ぎ先に反映されない場合があります。</p>
     </section>
-    <button class="btn btn-outline" onclick="logout()">ログアウト（ペア・記録は残す）</button>
+    <p id="pair-ended-message" role="status" style="display:none;color:var(--red);font-size:14px;line-height:1.7"></p>
+    <button class="btn btn-outline" id="logout-btn" onclick="logout()">ログアウト（ペア・記録は残す）</button>
     <p style="font-size:13px;line-height:1.6">ログインし直すときは引き継ぎコードを使います。先にコードをコピーして保管してください。</p>
     <button class="btn-red" onclick="resetApp()">ペアを解除してリセット</button>
   </div>
@@ -485,12 +486,12 @@ async function cloudLoad() {
   } catch(e) {
     console.error('cloudLoad error', e);
     hadSyncError = true;
-    setSyncStatus(false, '接続または本人IDを確認できません。ペアが解除された場合は再参加できません。端末内の記録は保持しています。');
+    setSyncStatus(false, state.pairEnded ? 'このペアは解除されたか、あなたの参加が終了しています。設定からログアウトできます。端末内の記録は保持しています。' : '接続または本人IDを確認できません。端末内の記録は保持しています。');
     return state.records;
   }
 }
 
-let state = { myName:'', partnerName:'', myId:'', partnerId:'', members:[], pendingSave:false, roomCode:'', transferCode:'', records:[], isSplitOn:true, selectedPayer:'me', splitMode:'split', calcCount:2 };
+let state = { myName:'', partnerName:'', myId:'', partnerId:'', members:[], pendingSave:false, pairEnded:false, roomCode:'', transferCode:'', records:[], isSplitOn:true, selectedPayer:'me', splitMode:'split', calcCount:2 };
 const KEY = 'warikan_v2';
 
 function saveLocal() {
@@ -575,8 +576,16 @@ async function normalizeRoom(raw, code) {
   Object.defineProperty(room, 'needsMigration', { value: legacy || JSON.stringify(room.records) !== JSON.stringify(raw.records || []) });
   return room;
 }
+function markPairEnded() {
+  state.pairEnded = true;
+  const message = document.getElementById('pair-ended-message');
+  message.style.display = 'block';
+  message.textContent = 'このペアは解除されたか、あなたの参加が終了しています。引き継ぎコードを発行し直す必要はありません。下のボタンから端末内の接続情報を削除してログアウトできます。';
+  document.getElementById('logout-btn').textContent = '解除済みペアからログアウト';
+}
+
 function requireIdentity(room) {
-  if(!room || !room.members.length) throw new Error('ペアが解除されています');
+  if(!room || !room.members.length) { markPairEnded(); throw new Error('ペアが解除されています'); }
   let me = room.members.find(m => m.id === state.myId);
   // Only pre-upgrade saved sessions are allowed the one-time name migration.
   if(!state.myId) {
@@ -584,7 +593,7 @@ function requireIdentity(room) {
     if(!me) throw new Error('本人を特定できません。引き継ぎコードを使用してください');
     state.myId = me.id;
   }
-  if(!me) throw new Error('本人IDがこのペアにありません');
+  if(!me) { markPairEnded(); throw new Error('本人IDがこのペアにありません'); }
   applyRoom(room, me.id);
   return me;
 }
@@ -1183,13 +1192,30 @@ async function renameMe() {
   finally { button.disabled = false; }
 }
 
-function logout() {
-  if(state.pendingSave) { showToast('未共有の記録があります。再保存してからログアウトしてください'); return; }
-  if(!document.getElementById('my-transfer-code').value) { showToast('先に引き継ぎコードを発行・コピーしてください'); return; }
-  if(!confirm('引き継ぎコードを保管しましたか？再ログインにはこのコードが必要です。ペアと共有記録は残ります。')) return;
-  clearInterval(syncTimer);
-  localStorage.removeItem(KEY);
-  location.reload();
+let loggingOut = false;
+async function logout() {
+  if(loggingOut) return;
+  loggingOut = true;
+  try {
+    // A successful read can confirm dissolution. Network errors never do.
+    if(!state.pairEnded) {
+      try {
+        const room = await readRoom(state.roomCode);
+        if(!room || !room.members.length || (state.myId && !room.members.some(m => m.id === state.myId))) markPairEnded();
+      } catch(e) { /* Keep the normal safeguards when status is unknown. */ }
+    }
+    if(state.pairEnded) {
+      const warning = state.pendingSave ? '未共有の変更も含め、' : '';
+      if(!confirm('このペアへの参加は終了しています。' + warning + 'この端末に残っている記録と接続情報を削除してログアウトしますか？解除済みの引き継ぎコードでは復元できません。')) return;
+    } else {
+      if(state.pendingSave) { showToast('未共有の記録があります。再保存してからログアウトしてください'); return; }
+      if(!document.getElementById('my-transfer-code').value) { showToast('先に引き継ぎコードを発行・コピーしてください'); return; }
+      if(!confirm('引き継ぎコードを保管しましたか？再ログインにはこのコードが必要です。ペアと共有記録は残ります。')) return;
+    }
+    clearInterval(syncTimer);
+    localStorage.removeItem(KEY);
+    location.reload();
+  } finally { loggingOut = false; }
 }
 
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
