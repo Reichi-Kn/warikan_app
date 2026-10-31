@@ -218,10 +218,17 @@
   </div>
   <div class="divider">または</div>
   <div class="card">
-    <div class="card-title">コードで参加する</div>
+    <div class="card-title">ペアコードで初めて参加する</div>
     <div class="field"><label>あなたの名前</label><input type="text" id="join-name" placeholder="例: けんた" maxlength="10"></div>
     <div class="field"><label>ペアコード（4桁）</label><input type="text" id="join-code" placeholder="0000" maxlength="4" inputmode="numeric"></div>
     <button class="btn btn-outline" onclick="joinRoom()">参加する</button>
+  </div>
+  <div class="divider">機種変更・アイコンの追加し直し</div>
+  <div class="card">
+    <div class="card-title">引き継ぎコードで復元する</div>
+    <div class="field"><label for="restore-code">あなたの引き継ぎコード</label><input type="text" id="restore-code" placeholder="WK1.…" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
+    <button class="btn btn-outline" id="restore-btn" onclick="restoreFromCode()">記録を引き継ぐ</button>
+    <div id="restore-message" role="status" style="font-size:13px;line-height:1.6"></div>
   </div>
 </div>
 
@@ -276,15 +283,24 @@
 <div id="screen-settings" class="screen">
   <div class="page-header"><div class="page-header-title">設定</div></div>
   <div class="settings-body">
-    <div class="settings-row"><div class="settings-key">ペアコード（相手に教えてください）</div><div class="settings-code" id="show-code">----</div></div>
+    <div class="settings-row"><div class="settings-key">ペアコード（相手の初回参加用）</div><div class="settings-code" id="show-code">----</div></div>
     <div class="settings-row"><div class="settings-key">あなたの名前</div><div class="settings-val" id="show-my-name">-</div></div>
     <div class="settings-row"><div class="settings-key">相手の名前</div><div class="settings-val" id="show-partner-name">-</div></div>
+    <section class="settings-row transfer-guide" aria-labelledby="transfer-code-title">
+      <h2 id="transfer-code-title">あなたの引き継ぎコード</h2>
+      <p>ペアコードは相手の初回参加用です。あなた自身の機種変更・再追加には、こちらのコードを使ってください。</p>
+      <input type="text" id="my-transfer-code" aria-label="あなたの引き継ぎコード" readonly style="margin:10px 0;font-family:monospace;font-size:12px" placeholder="オンラインで発行できます">
+      <button class="btn btn-outline" id="issue-transfer-btn" onclick="ensureTransferCode()">引き継ぎコードを発行・確認する</button>
+      <button class="btn btn-outline" id="copy-transfer-btn" onclick="copyTransferCode()" disabled style="margin-top:8px">コードをコピー</button>
+      <p id="transfer-message" role="status"></p>
+      <p>このコードであなたとして記録を開けます。相手との共有や公開はせず、大切に保管してください。</p>
+    </section>
     <section class="settings-row transfer-guide" aria-labelledby="transfer-title">
       <h2 id="transfer-title">機種変更・アイコン追加時の引き継ぎ方法</h2>
       <ol>
-        <li>この画面の「あなたの名前」と「ペアコード」を控え、ホーム画面で「同期済み」になっていることを確認してください。</li>
+        <li>上の「あなたの引き継ぎコード」をコピーして控え、ホーム画面で「同期済み」になっていることを確認してください。</li>
         <li>ペアは解除せず、新しい端末や追加し直したホーム画面のアイコンからアプリを開いてください。</li>
-        <li>参加欄に、控えたものと同じ名前・ペアコードを入力し、「参加する」を押してください。入力画面が出ない場合は、そのまま記録を確認してください。</li>
+        <li>最初の画面の「引き継ぎコードで復元する」にコードを貼り付け、「記録を引き継ぐ」を押してください。名前やペアコードの再入力は不要です。入力画面が出ない場合は、そのまま記録を確認してください。</li>
         <li>引き継いだ記録を確認してから、古いホーム画面のアイコンを削除してください。</li>
       </ol>
       <p class="transfer-warning">引き継ぎ時は「ペアを解除してリセット」を押さないでください。共有している記録も削除され、同じコードで参加できなくなります。</p>
@@ -424,9 +440,10 @@ async function cloudSave(records) {
   state.records = records;
   saveLocal();
   try {
+    const remote = await readRoom(state.roomCode);
     const payload = {
       code: state.roomCode,
-      data: JSON.stringify({ records, member1: state.myName, member2: state.partnerName })
+      data: JSON.stringify({ ...remote, records, member1: remote?.member1 || state.myName, member2: remote?.member2 && remote.member2 !== '相手' ? remote.member2 : state.partnerName })
     };
     const res = await fetch(SUPA_URL + '/rest/v1/rooms', {
       method: 'POST',
@@ -498,7 +515,7 @@ async function cloudLoad() {
   }
 }
 
-let state = { myName:'', partnerName:'', roomCode:'', records:[], isSplitOn:true, selectedPayer:'me', splitMode:'split', calcCount:2 };
+let state = { myName:'', partnerName:'', roomCode:'', transferCode:'', records:[], isSplitOn:true, selectedPayer:'me', splitMode:'split', calcCount:2 };
 const KEY = 'warikan_v2';
 
 function saveLocal() {
@@ -506,6 +523,7 @@ function saveLocal() {
     myName: state.myName,
     partnerName: state.partnerName,
     roomCode: state.roomCode,
+    transferCode: state.transferCode,
     records: state.records
   }));
 }
@@ -517,11 +535,106 @@ function loadLocal() {
       state.myName = d.myName;
       state.partnerName = d.partnerName;
       state.roomCode = d.roomCode;
+      state.transferCode = d.transferCode || '';
       state.records = d.records || [];
       return true;
     }
   } catch(e){}
   return false;
+}
+
+// Transfer keys are stored in the existing rooms JSON; no schema migration is needed.
+async function readRoom(code) {
+  const res = await fetch(SUPA_URL + '/rest/v1/rooms?code=eq.' + encodeURIComponent(code) + '&select=data', {
+    headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY }
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+  const rows = await res.json();
+  return rows.length ? JSON.parse(rows[0].data) : null;
+}
+
+async function writeRoom(code, data) {
+  const res = await fetch(SUPA_URL + '/rest/v1/rooms', {
+    method: 'POST',
+    headers: { apikey: SUPA_KEY, Authorization: 'Bearer ' + SUPA_KEY, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify({ code, data: JSON.stringify(data) })
+  });
+  if(!res.ok) throw new Error('HTTP ' + res.status);
+}
+
+function encodeTransferName(name) {
+  return btoa(String.fromCharCode(...new TextEncoder().encode(name))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function decodeTransferCode(value) {
+  const parts = value.trim().split('.');
+  if(parts.length !== 4 || parts[0] !== 'WK1' || !/^\d{4}$/.test(parts[1]) || !/^[A-Za-z0-9_-]+$/.test(parts[2]) || !/^[a-f0-9]{32}$/.test(parts[3])) throw new Error('invalid');
+  const name = new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(atob(parts[2].replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0)));
+  if(!name || name.length > 10) throw new Error('invalid');
+  return { room: parts[1], name, token: parts[3] };
+}
+
+let issuingTransfer = false;
+async function ensureTransferCode() {
+  if(issuingTransfer || !state.roomCode) return;
+  issuingTransfer = true;
+  const button = document.getElementById('issue-transfer-btn');
+  const message = document.getElementById('transfer-message');
+  button.disabled = true;
+  try {
+    const room = await readRoom(state.roomCode);
+    if(!room || ![room.member1, room.member2].includes(state.myName)) throw new Error('member');
+    const keyName = encodeTransferName(state.myName);
+    const keys = { ...(room.transferKeys || {}) };
+    let token = keys[keyName];
+    if(!/^[a-f0-9]{32}$/.test(token || '')) {
+      token = Array.from(crypto.getRandomValues(new Uint8Array(16)), n => n.toString(16).padStart(2, '0')).join('');
+      keys[keyName] = token;
+      await writeRoom(state.roomCode, { ...room, transferKeys: keys });
+    }
+    state.transferCode = `WK1.${state.roomCode}.${keyName}.${token}`;
+    saveLocal();
+    document.getElementById('my-transfer-code').value = state.transferCode;
+    document.getElementById('copy-transfer-btn').disabled = false;
+    message.textContent = '発行済みです。コードをコピーして保管してください。';
+  } catch(e) {
+    document.getElementById('my-transfer-code').value = '';
+    document.getElementById('copy-transfer-btn').disabled = true;
+    message.textContent = '引き継ぎコードを確認できませんでした。接続を確認して再度お試しください。';
+  } finally { issuingTransfer = false; button.disabled = false; }
+}
+
+async function copyTransferCode() {
+  const input = document.getElementById('my-transfer-code');
+  if(!input.value) return;
+  try { await navigator.clipboard.writeText(input.value); showToast('引き継ぎコードをコピーしました'); }
+  catch(e) { input.focus(); input.select(); showToast('コードを選択しました。コピーしてください'); }
+}
+
+async function restoreFromCode() {
+  const button = document.getElementById('restore-btn');
+  const message = document.getElementById('restore-message');
+  let decoded;
+  try { decoded = decodeTransferCode(document.getElementById('restore-code').value); }
+  catch(e) { message.textContent = '引き継ぎコードを確認してください。'; return; }
+  button.disabled = true;
+  message.textContent = '確認しています…';
+  try {
+    const room = await readRoom(decoded.room);
+    const keyName = encodeTransferName(decoded.name);
+    if(!room || room.transferKeys?.[keyName] !== decoded.token || ![room.member1, room.member2].includes(decoded.name)) {
+      message.textContent = 'このコードは使用できません。ペアが解除されているか、コードが違います。'; return;
+    }
+    state.myName = decoded.name;
+    state.partnerName = [room.member1, room.member2].find(n => n && n !== decoded.name && n !== '相手') || '相手';
+    state.roomCode = decoded.room;
+    state.transferCode = document.getElementById('restore-code').value.trim();
+    state.records = room.records || [];
+    saveLocal();
+    await enterApp();
+    showToast('記録を引き継ぎました');
+  } catch(e) { message.textContent = '接続できませんでした。通信環境を確認して再度お試しください。'; }
+  finally { button.disabled = false; }
 }
 
 // ===== CALENDAR =====
@@ -613,30 +726,22 @@ async function joinRoom() {
     const res = await fetch(SUPA_URL + '/rest/v1/rooms?code=eq.' + code + '&select=data', {
       headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
     });
+    if(!res.ok) throw new Error('HTTP ' + res.status);
     const rows = await res.json();
     if(!rows || rows.length === 0){ showToast('そのコードは存在しません'); return; }
     const d = JSON.parse(rows[0].data);
     const member1 = d.member1 || '';
     if(!member1){ showToast('そのコードは使用できません'); return; }
-    const partner = member1 && member1 !== myName ? member1 : '相手';
+    const members = [d.member1, d.member2].filter(n => n && n !== '相手');
+    if(members.length >= 2 && !members.includes(myName)) { showToast('このペアは参加済みです。引き継ぎコードを使ってください'); return; }
+    const partner = members.find(n => n !== myName) || '相手';
+    const updated = { ...d, member1, member2: member1 === myName ? (d.member2 || '') : myName, leftMember: '' };
+    await writeRoom(code, updated);
     state.myName = myName;
     state.partnerName = partner;
     state.roomCode = code;
+    state.transferCode = '';
     state.records = d.records || [];
-    // member2を自分の名前で上書き、leftMemberをクリア
-    await fetch(SUPA_URL + '/rest/v1/rooms', {
-      method: 'POST',
-      headers: {
-        'apikey': SUPA_KEY,
-        'Authorization': 'Bearer ' + SUPA_KEY,
-        'Content-Type': 'application/json',
-        'Prefer': 'resolution=merge-duplicates,return=minimal'
-      },
-      body: JSON.stringify({
-        code,
-        data: JSON.stringify({ records: state.records, member1, member2: myName, leftMember: '' })
-      })
-    });
   } catch(e){ showToast('接続エラーが発生しました'); return; }
   saveLocal(); enterApp(); showToast('接続しました');
 }
@@ -648,6 +753,7 @@ async function enterApp() {
   document.getElementById('screen-main').classList.add('active');
   document.getElementById('main-nav').style.display='flex';
   updateLabels(); await loadAndRender();
+  await ensureTransferCode();
   setInterval(async()=>{
     const fresh=await cloudLoad();
     if(JSON.stringify(fresh)!==JSON.stringify(state.records)){
