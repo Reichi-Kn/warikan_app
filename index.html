@@ -86,7 +86,9 @@
   .row-right { text-align: right; flex-shrink: 0; }
   .row-amount { font-family: 'DM Mono', monospace; font-size: 17px; font-weight: 500; }
   .row-split { font-size: 11px; color: var(--text-sub); margin-top: 2px; }
-  .row-actions { display: flex; flex-direction: column; align-items: center; gap: 4px; flex-shrink: 0; }
+  .row[role="button"] { cursor: pointer; }
+  .row[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .row-people { display: flex; flex-direction: column; gap: 3px; margin-top: 4px; font-size: 12px; color: var(--text-sub); overflow-wrap: anywhere; }
   .date-btn { background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); font-family: 'Noto Sans JP', sans-serif; font-size: 15px; padding: 11px 13px; width: 100%; text-align: left; cursor: pointer; transition: border-color 0.15s; }
   .date-btn:active { border-color: var(--accent); }
   .calendar-box { background: var(--white); border-radius: 16px; padding: 16px; width: 320px; max-width: 90vw; }
@@ -105,11 +107,7 @@
   .cal-day.other-month { color: var(--border); }
   .cal-day.sun { color: #e53e3e; }
   .cal-day.sat { color: var(--accent); }
-  .cal-day.selected.sun, .cal-day.selected.sat { color: white; }  .row-del { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
-  .row-del:active { color: var(--red); }
-  .row-edit { background: none; border: none; color: var(--border); font-size: 15px; cursor: pointer; padding: 4px; flex-shrink: 0; transition: color 0.15s; }
-  .row-edit:active { color: var(--accent); }
-  .empty { text-align: center; padding: 52px 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; }
+  .cal-day.selected.sun, .cal-day.selected.sat { color: white; }  .empty { text-align: center; padding: 52px 20px; color: var(--text-sub); font-size: 14px; line-height: 1.8; }
   .row.settle { border-color: #bbf7d0; background: #f0fdf4; }
   .row.settle .row-amount { color: var(--green); }
   .tag.settle-tag { background: #dcfce7; border-color: #86efac; color: var(--green); }
@@ -132,7 +130,7 @@
   .confirm-ok { background: var(--red); border: none; border-radius: 8px; color: #fff; cursor: pointer; font-family: 'Noto Sans JP', sans-serif; font-size: 14px; font-weight: 700; padding: 12px; }
   .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.35); z-index: 100; opacity: 0; pointer-events: none; transition: opacity 0.25s; }
   .overlay.open { opacity: 1; pointer-events: all; }
-  .sheet { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: 100%; max-width: 430px; background: var(--white); border-radius: 16px 16px 0 0; z-index: 101; padding: 12px 20px 40px; transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); border-top: 1px solid var(--border); }
+  .sheet { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%) translateY(100%); width: 100%; max-width: 430px; max-height: 90dvh; overflow-y: auto; background: var(--white); border-radius: 16px 16px 0 0; z-index: 101; padding: 12px 20px 40px; transition: transform 0.3s cubic-bezier(0.32,0.72,0,1); border-top: 1px solid var(--border); }
   .sheet.open { transform: translateX(-50%) translateY(0); }
   .sheet-handle { width: 36px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 20px; }
   .sheet-title { font-size: 17px; font-weight: 700; margin-bottom: 20px; }
@@ -289,6 +287,19 @@
   <div class="sheet-handle"></div>
   <div class="sheet-title" id="sheet-title">支払いを記録</div>
   <div class="form-field">
+    <label class="form-label">日付</label>
+    <button type="button" id="f-date-btn" class="date-btn" onclick="openCalendar()">📅 <span id="f-date-label">今日</span></button>
+    <input type="hidden" id="f-date">
+  </div>
+  <div class="form-field"><label class="form-label">メモ</label><input type="text" id="f-memo" placeholder="例: 居酒屋、ランチ..."></div>
+  <div class="form-field">
+    <label class="form-label">支払ったのは？</label>
+    <div class="payer-row">
+      <button class="payer-btn sel" id="payer-me" onclick="selectPayer('me')"><span id="payer-me-label">あなた</span></button>
+      <button class="payer-btn" id="payer-partner" onclick="selectPayer('partner')"><span id="payer-partner-label">相手</span></button>
+    </div>
+  </div>
+  <div class="form-field" id="split-method-field">
     <label class="form-label">負担方法</label>
     <div class="split-mode-row">
       <button type="button" class="split-mode-btn sel" id="mode-split" onclick="setSplitMode('split')">割り勘</button>
@@ -302,20 +313,8 @@
     </div>
     <div class="custom-total" id="custom-total">合計 ¥0</div>
   </div>
-  <div class="form-field"><label class="form-label">メモ</label><input type="text" id="f-memo" placeholder="例: 居酒屋、ランチ..."></div>
-  <div class="form-field">
-    <label class="form-label">日付</label>
-    <button type="button" id="f-date-btn" class="date-btn" onclick="openCalendar()">📅 <span id="f-date-label">今日</span></button>
-    <input type="hidden" id="f-date">
-  </div>
-  <div class="form-field">
-    <label class="form-label">支払ったのは？</label>
-    <div class="payer-row">
-      <button class="payer-btn sel" id="payer-me" onclick="selectPayer('me')"><span id="payer-me-label">あなた</span></button>
-      <button class="payer-btn" id="payer-partner" onclick="selectPayer('partner')"><span id="payer-partner-label">相手</span></button>
-    </div>
-  </div>
   <button class="btn" id="sheet-submit-btn" onclick="addRecord()" style="margin-top:4px">記録する</button>
+  <button type="button" class="btn-red" id="sheet-delete-btn" style="display:none; margin-top:12px" onclick="deleteRecord(_editingId)">この記録を削除する</button>
 </div>
 
 <div class="confirm-overlay" id="confirm-overlay">
@@ -661,6 +660,11 @@ let _editingId = null;
 
 function openSheet(editId = null) {
   _editingId = editId;
+  const editingRecord = state.records.find(r => r.id === editId);
+  document.getElementById("sheet-delete-btn").style.display = editId !== null ? "block" : "none";
+  document.getElementById("split-method-field").style.display = "flex";
+  document.querySelector("#split-method-field > .form-label").textContent = editingRecord?.isSettle ? "精算金額" : "負担方法";
+  document.querySelector("#split-method-field .split-mode-row").style.display = editingRecord?.isSettle ? "none" : "grid";
   if(editId !== null) {
     const r = state.records.find(r => r.id === editId);
     if(!r) return;
@@ -700,9 +704,10 @@ function openSheet(editId = null) {
     setSplitMode('split');
     updateHint();
   }
+  if(editingRecord?.isSettle) document.getElementById('split-hint').classList.remove('show');
   document.getElementById('overlay').classList.add('open');
   document.getElementById('sheet').classList.add('open');
-  setTimeout(()=>document.getElementById('f-amount').focus(), 100);
+  document.getElementById('sheet').scrollTop = 0;
 }
 
 function closeSheet() {
@@ -747,7 +752,9 @@ document.getElementById('f-share-partner').addEventListener('input',updateCustom
 
 async function addRecord() {
   const wasEditing = _editingId !== null;
-  const custom = state.splitMode === 'custom';
+  const editingRecord = state.records.find(r => r.id === _editingId);
+  const isSettle = !!editingRecord?.isSettle;
+  const custom = !isSettle && state.splitMode === 'custom';
   const myShare = custom ? (parseInt(document.getElementById('f-share-me').value)||0) : 0;
   const partnerShare = custom ? (parseInt(document.getElementById('f-share-partner').value)||0) : 0;
   const amount = custom ? myShare + partnerShare : parseInt(document.getElementById('f-amount').value);
@@ -760,7 +767,7 @@ async function addRecord() {
   const owedAmount = custom
     ? (payerName===state.myName ? partnerShare : myShare)
     : Math.ceil(amount/2);
-  const patch = {amount,memo,date,payerName,isSplit:true,splitMode:custom?'custom':'split',splitAmount:owedAmount,owedAmount,shares};
+  const patch = {amount,memo,date,payerName,isSplit:!isSettle,splitMode:custom?'custom':'split',splitAmount:isSettle?0:owedAmount,owedAmount:isSettle?0:owedAmount,shares};
   if(_editingId !== null) {
     state.records = state.records.map(r => r.id === _editingId ? {...r,...patch} : r);
   } else {
@@ -791,6 +798,7 @@ async function confirmDelete() {
   state.records = state.records.filter(r => r.id !== _pendingDeleteId);
   _pendingDeleteId = null;
   document.getElementById('confirm-overlay').classList.remove('open');
+  closeSheet();
   const saved = await cloudSave(state.records); renderHistory(); renderBalance(); showToast(saved ? '削除・共有しました ✓' : '端末では削除しましたが共有に失敗しました ⚠️');
 }
 
@@ -800,18 +808,15 @@ function renderHistory() {
   el.innerHTML=state.records.map(r=>{
     const isSettle = r.isSettle;
     return `
-    <div class="row${isSettle?' settle':''}">
+    <div class="row${isSettle?' settle':''}" role="button" tabindex="0" aria-label="${esc(r.memo)}を編集" onclick="openSheet(${r.id})" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();openSheet(${r.id});}">
       <div class="row-left">
         <div class="row-memo">${esc(r.memo)}</div>
-        <div class="row-meta"><span>${r.date}</span><span class="tag${isSettle?' settle-tag':''}">支払: ${esc(r.payerName)}</span>${isSettle?'<span class="tag settle-tag">精算</span>':''}${r.recordedBy?`<span>記録: ${esc(r.recordedBy)}</span>`:''}</div>
+        <div class="row-meta"><span>${esc(r.date)}</span>${isSettle?'<span class="tag settle-tag">精算</span>':''}</div>
+        <div class="row-people"><span>支払: ${esc(r.payerName)}</span><span>記録: ${esc(r.recordedBy || '不明')}</span></div>
       </div>
       <div class="row-right">
         <div class="row-amount">¥${r.amount.toLocaleString()}</div>
         <div class="row-split">${isSettle?'返金済み':r.splitMode==='custom'&&r.shares?`${esc(state.myName)} ¥${(r.shares[state.myName]||0).toLocaleString()} / ${esc(state.partnerName)} ¥${(r.shares[state.partnerName]||0).toLocaleString()}`:r.isSplit?'÷2 = ¥'+r.splitAmount.toLocaleString():'割り勘なし'}</div>
-      </div>
-      <div class="row-actions">
-        ${!isSettle?`<button class="row-edit" onclick="openSheet(${r.id})">✎</button>`:''}
-        <button class="row-del" onclick="deleteRecord(${r.id})">✕</button>
       </div>
     </div>`;
   }).join('');
@@ -959,7 +964,7 @@ async function confirmLeave() {
 
 function showToast(msg) { const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2200); }
 
-function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
 
 init();
 </script>
