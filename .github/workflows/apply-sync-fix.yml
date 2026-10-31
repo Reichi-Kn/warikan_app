@@ -1,0 +1,44 @@
+name: Apply sync status fix
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-sync-fix.yml'
+permissions:
+  contents: write
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch index.html
+        shell: python
+        run: |
+          from pathlib import Path
+          p = Path('index.html')
+          s = p.read_text()
+          def rep(old,new):
+              global s
+              if old not in s:
+                  raise SystemExit('Expected text not found: ' + old[:80])
+              s=s.replace(old,new,1)
+          rep("  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }", "  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }\n  .live-badge.sync-error { color: var(--red); background: #fef2f2; border-color: #fca5a5; }\n  .live-badge.sync-error .live-dot { background: var(--red); animation: none; }\n  .live-badge.sync-ok .live-dot { background: var(--green); }\n  .sync-warning { display:none; margin: 12px 16px 0; padding: 12px 14px; border: 1px solid #fca5a5; background:#fef2f2; color:#991b1b; border-radius: var(--r); font-size:13px; line-height:1.6; }\n  .sync-warning.show { display:block; }\n  .sync-warning-title { font-weight:700; margin-bottom:2px; }")
+          rep('<div class="live-badge"><div class="live-dot"></div><span id="pair-label">ペア</span></div>\n  </div>', '<div class="live-badge sync-ok" id="sync-badge"><div class="live-dot"></div><span id="pair-label">ペア</span></div>\n  </div>\n  <div class="sync-warning" id="sync-warning"><div class="sync-warning-title">⚠️ 共有できていません</div><div id="sync-warning-text">この端末には保存されていますが、相手には反映されていない可能性があります。</div></div>')
+          rep("const SUPA_KEY = 'sb_publishable_lFQLvGsPlM2_blIE81zGEg_2HlNUh84';\n\nasync function cloudSave(records) {", "const SUPA_KEY = 'sb_publishable_lFQLvGsPlM2_blIE81zGEg_2HlNUh84';\n\nlet syncOnline = true;\nlet hadSyncError = false;\n\nfunction setSyncStatus(ok, message = '') {\n  const badge = document.getElementById('sync-badge');\n  const warning = document.getElementById('sync-warning');\n  const warningText = document.getElementById('sync-warning-text');\n  if(!badge || !warning) return;\n  syncOnline = ok;\n  badge.classList.toggle('sync-ok', ok);\n  badge.classList.toggle('sync-error', !ok);\n  warning.classList.toggle('show', !ok);\n  if(!ok && message) warningText.textContent = message;\n  const label = document.getElementById('pair-label');\n  if(label) label.textContent = ok ? '同期済み · ' + state.myName + ' & ' + state.partnerName : '共有停止 · ' + state.myName + ' & ' + state.partnerName;\n}\n\nasync function cloudSave(records) {")
+          rep("    await fetch(SUPA_URL + '/rest/v1/rooms', {", "    const res = await fetch(SUPA_URL + '/rest/v1/rooms', {")
+          rep("      body: JSON.stringify(payload)\n    });\n  } catch(e) { console.error('cloudSave error', e); }\n}", "      body: JSON.stringify(payload)\n    });\n    if(!res.ok) throw new Error('Supabase save failed: HTTP ' + res.status);\n    const recovered = hadSyncError;\n    hadSyncError = false;\n    setSyncStatus(true);\n    if(recovered) showToast('共有が復旧しました ✓');\n    return true;\n  } catch(e) {\n    console.error('cloudSave error', e);\n    hadSyncError = true;\n    setSyncStatus(false, 'この端末には保存されていますが、相手への共有に失敗しました。接続が戻ると再同期を試みます。');\n    return false;\n  }\n}")
+          rep("      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }\n    });\n    const rows = await res.json();", "      headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }\n    });\n    if(!res.ok) throw new Error('Supabase load failed: HTTP ' + res.status);\n    const rows = await res.json();")
+          rep("      return remoteRecords;\n    }\n  } catch(e) { console.error('cloudLoad error', e); }\n  return state.records;\n}", "      const recovered = hadSyncError;\n      hadSyncError = false;\n      setSyncStatus(true);\n      if(recovered) showToast('共有が復旧しました ✓');\n      return remoteRecords;\n    }\n    throw new Error('Room not found');\n  } catch(e) {\n    console.error('cloudLoad error', e);\n    hadSyncError = true;\n    setSyncStatus(false, 'Supabaseに接続できません。表示中の記録はこの端末に保存されていますが、相手と同期されていません。');\n    return state.records;\n  }\n}")
+          rep("document.getElementById('pair-label').textContent=state.myName+' & '+state.partnerName;", "document.getElementById('pair-label').textContent=(syncOnline?'同期済み · ':'共有停止 · ')+state.myName+' & '+state.partnerName;")
+          rep("async function addRecord() {\n  const amount=", "async function addRecord() {\n  const wasEditing = _editingId !== null;\n  const amount=")
+          s=s.replace("    showToast('更新しました');", "", 1).replace("    showToast('記録しました');", "", 1)
+          rep("  await cloudSave(state.records);\n  closeSheet(); renderHistory(); renderBalance();", "  const saved = await cloudSave(state.records);\n  closeSheet(); renderHistory(); renderBalance();\n  showToast(saved ? (wasEditing ? '更新・共有しました ✓' : '記録・共有しました ✓') : '端末には保存しましたが共有に失敗しました ⚠️');")
+          rep("  await cloudSave(state.records); renderHistory(); renderBalance(); showToast('削除しました');", "  const saved = await cloudSave(state.records); renderHistory(); renderBalance(); showToast(saved ? '削除・共有しました ✓' : '端末では削除しましたが共有に失敗しました ⚠️');")
+          rep("  await cloudSave(state.records);\n  closeSettleDialog();\n  renderHistory(); renderBalance(); showToast('精算を記録しました ✓');", "  const saved = await cloudSave(state.records);\n  closeSettleDialog();\n  renderHistory(); renderBalance(); showToast(saved ? '精算を記録・共有しました ✓' : '端末には精算を保存しましたが共有に失敗しました ⚠️');")
+          p.write_text(s)
+      - name: Commit fix
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.html
+          git commit -m "Show sync failures and preserve local records"
+          git push
