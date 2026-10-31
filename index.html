@@ -51,6 +51,12 @@
   .live-badge { display: flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-sub); background: var(--bg); border: 1px solid var(--border); border-radius: 20px; padding: 4px 10px; }
   .live-dot { width: 6px; height: 6px; background: var(--green); border-radius: 50%; animation: blink 2s infinite; }
   @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.3} }
+  .live-badge.sync-error { color: var(--red); background: #fef2f2; border-color: #fca5a5; }
+  .live-badge.sync-error .live-dot { background: var(--red); animation: none; }
+  .live-badge.sync-ok .live-dot { background: var(--green); }
+  .sync-warning { display:none; margin: 12px 16px 0; padding: 12px 14px; border: 1px solid #fca5a5; background:#fef2f2; color:#991b1b; border-radius: var(--r); font-size:13px; line-height:1.6; }
+  .sync-warning.show { display:block; }
+  .sync-warning-title { font-weight:700; margin-bottom:2px; }
 
   /* BALANCE */
   .balance-wrap { padding: 14px 16px; }
@@ -209,8 +215,9 @@
 <div id="screen-main" class="screen">
   <div class="header">
     <div class="header-title">割り勘メモ</div>
-    <div class="live-badge"><div class="live-dot"></div><span id="pair-label">ペア</span></div>
+    <div class="live-badge sync-ok" id="sync-badge"><div class="live-dot"></div><span id="pair-label">ペア</span></div>
   </div>
+  <div class="sync-warning" id="sync-warning"><div class="sync-warning-title">⚠️ 共有できていません</div><div id="sync-warning-text">この端末には保存されていますが、相手には反映されていない可能性があります。</div></div>
   <div class="balance-wrap">
     <div class="balance-card">
       <div class="balance-label">精算状況</div>
@@ -358,6 +365,23 @@
 const SUPA_URL = 'https://qwfqasjmwvhysqxskauo.supabase.co';
 const SUPA_KEY = 'sb_publishable_lFQLvGsPlM2_blIE81zGEg_2HlNUh84';
 
+let syncOnline = true;
+let hadSyncError = false;
+
+function setSyncStatus(ok, message = '') {
+  const badge = document.getElementById('sync-badge');
+  const warning = document.getElementById('sync-warning');
+  const warningText = document.getElementById('sync-warning-text');
+  if(!badge || !warning) return;
+  syncOnline = ok;
+  badge.classList.toggle('sync-ok', ok);
+  badge.classList.toggle('sync-error', !ok);
+  warning.classList.toggle('show', !ok);
+  if(!ok && message) warningText.textContent = message;
+  const label = document.getElementById('pair-label');
+  if(label) label.textContent = ok ? '同期済み · ' + state.myName + ' & ' + state.partnerName : '共有停止 · ' + state.myName + ' & ' + state.partnerName;
+}
+
 async function cloudSave(records) {
   state.records = records;
   saveLocal();
@@ -366,7 +390,7 @@ async function cloudSave(records) {
       code: state.roomCode,
       data: JSON.stringify({ records, member1: state.myName, member2: state.partnerName })
     };
-    await fetch(SUPA_URL + '/rest/v1/rooms', {
+    const res = await fetch(SUPA_URL + '/rest/v1/rooms', {
       method: 'POST',
       headers: {
         'apikey': SUPA_KEY,
@@ -376,7 +400,18 @@ async function cloudSave(records) {
       },
       body: JSON.stringify(payload)
     });
-  } catch(e) { console.error('cloudSave error', e); }
+    if(!res.ok) throw new Error('Supabase save failed: HTTP ' + res.status);
+    const recovered = hadSyncError;
+    hadSyncError = false;
+    setSyncStatus(true);
+    if(recovered) showToast('共有が復旧しました ✓');
+    return true;
+  } catch(e) {
+    console.error('cloudSave error', e);
+    hadSyncError = true;
+    setSyncStatus(false, 'この端末には保存されていますが、相手への共有に失敗しました。接続が戻ると再同期を試みます。');
+    return false;
+  }
 }
 
 async function cloudLoad() {
@@ -384,6 +419,7 @@ async function cloudLoad() {
     const res = await fetch(SUPA_URL + '/rest/v1/rooms?code=eq.' + state.roomCode + '&select=data', {
       headers: { 'apikey': SUPA_KEY, 'Authorization': 'Bearer ' + SUPA_KEY }
     });
+    if(!res.ok) throw new Error('Supabase load failed: HTTP ' + res.status);
     const rows = await res.json();
     if(rows && rows.length > 0) {
       const d = JSON.parse(rows[0].data);
@@ -408,10 +444,19 @@ async function cloudLoad() {
         if(state.partnerName !== '相手') showToast(newPartner + ' が参加しました');
       }
 
+      const recovered = hadSyncError;
+      hadSyncError = false;
+      setSyncStatus(true);
+      if(recovered) showToast('共有が復旧しました ✓');
       return remoteRecords;
     }
-  } catch(e) { console.error('cloudLoad error', e); }
-  return state.records;
+    throw new Error('Room not found');
+  } catch(e) {
+    console.error('cloudLoad error', e);
+    hadSyncError = true;
+    setSyncStatus(false, 'Supabaseに接続できません。表示中の記録はこの端末に保存されていますが、相手と同期されていません。');
+    return state.records;
+  }
 }
 
 let state = { myName:'', partnerName:'', roomCode:'', records:[], isSplitOn:true, selectedPayer:'me', calcCount:2 };
@@ -573,7 +618,7 @@ async function enterApp() {
 }
 
 function updateLabels() {
-  document.getElementById('pair-label').textContent=state.myName+' & '+state.partnerName;
+  document.getElementById('pair-label').textContent=(syncOnline?'同期済み · ':'共有停止 · ')+state.myName+' & '+state.partnerName;
   document.getElementById('me-label').textContent=state.myName;
   document.getElementById('partner-label').textContent=state.partnerName;
   document.getElementById('payer-me-label').textContent=state.myName;
@@ -658,6 +703,7 @@ function updateHint() {
 document.getElementById('f-amount').addEventListener('input',updateHint);
 
 async function addRecord() {
+  const wasEditing = _editingId !== null;
   const amount=parseInt(document.getElementById('f-amount').value);
   const memo=document.getElementById('f-memo').value.trim()||'支払い';
   const date=document.getElementById('f-date').value||'今日';
@@ -670,15 +716,16 @@ async function addRecord() {
       isSplit: state.isSplitOn,
       splitAmount: state.isSplitOn ? Math.ceil(amount/2) : 0
     } : r);
-    showToast('更新しました');
+
   } else {
     // 新規追加
     const record={id:Date.now(),amount,memo,date,payerName:state.selectedPayer==='me'?state.myName:state.partnerName,isSplit:state.isSplitOn,splitAmount:state.isSplitOn?Math.ceil(amount/2):0};
     state.records.unshift(record);
-    showToast('記録しました');
+
   }
-  await cloudSave(state.records);
+  const saved = await cloudSave(state.records);
   closeSheet(); renderHistory(); renderBalance();
+  showToast(saved ? (wasEditing ? '更新・共有しました ✓' : '記録・共有しました ✓') : '端末には保存しましたが共有に失敗しました ⚠️');
 }
 
 let _pendingDeleteId = null;
@@ -701,7 +748,7 @@ async function confirmDelete() {
   state.records = state.records.filter(r => r.id !== _pendingDeleteId);
   _pendingDeleteId = null;
   document.getElementById('confirm-overlay').classList.remove('open');
-  await cloudSave(state.records); renderHistory(); renderBalance(); showToast('削除しました');
+  const saved = await cloudSave(state.records); renderHistory(); renderBalance(); showToast(saved ? '削除・共有しました ✓' : '端末では削除しましたが共有に失敗しました ⚠️');
 }
 
 function renderHistory() {
@@ -803,9 +850,9 @@ async function confirmSettle() {
     isSettle: true
   };
   state.records.unshift(record);
-  await cloudSave(state.records);
+  const saved = await cloudSave(state.records);
   closeSettleDialog();
-  renderHistory(); renderBalance(); showToast('精算を記録しました ✓');
+  renderHistory(); renderBalance(); showToast(saved ? '精算を記録・共有しました ✓' : '端末には精算を保存しましたが共有に失敗しました ⚠️');
 }
 
 function changeCount(d) { state.calcCount=Math.max(2,Math.min(10,state.calcCount+d)); document.getElementById('count-display').textContent=state.calcCount; calcSplit(); }
